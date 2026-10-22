@@ -1,4 +1,4 @@
-@extends('layouts.dashboard')
+@extends('layouts.app')
 @section('sidebar')
 <x-sidebar-dashboard>
     <x-sidebar-menu-dashboard routeName="testing-meni" tittle="test1"/>

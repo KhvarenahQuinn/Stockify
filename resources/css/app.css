@@ -12,17 +12,112 @@
     }
 }
 
+/* Desktop scrollbars: a thin inset pill instead of the default full-width
+   bar. The transparent border plus background-clip keeps the thumb compact
+   without adding padding to any scroll container. */
+@media (min-width: 1024px) and (pointer: fine) {
+    /* Firefox uses the standard properties. Chromium and Safari need the
+       pseudo-elements instead; setting both makes Chromium ignore the custom
+       scrollbar and fall back to its arrow-button native style. */
+    @supports (-moz-appearance: none) {
+        html {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+
+        html.dark {
+            scrollbar-color: #4b5563 transparent;
+        }
+    }
+
+    html::-webkit-scrollbar,
+    html *::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+
+    html::-webkit-scrollbar-track,
+    html *::-webkit-scrollbar-track,
+    html::-webkit-scrollbar-corner,
+    html *::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+
+    html::-webkit-scrollbar-button,
+    html *::-webkit-scrollbar-button {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        background: transparent !important;
+    }
+
+    html::-webkit-scrollbar-thumb,
+    html *::-webkit-scrollbar-thumb {
+        border: 3px solid transparent;
+        border-radius: 9999px;
+        background-color: #cbd5e1;
+        background-clip: content-box;
+    }
+
+    html::-webkit-scrollbar-thumb:hover,
+    html *::-webkit-scrollbar-thumb:hover {
+        background-color: #94a3b8;
+    }
+
+    html.dark::-webkit-scrollbar-thumb,
+    html.dark *::-webkit-scrollbar-thumb {
+        background-color: #4b5563;
+    }
+
+    html.dark::-webkit-scrollbar-thumb:hover,
+    html.dark *::-webkit-scrollbar-thumb:hover {
+        background-color: #6b7280;
+    }
+}
+
+/* Desktop sidebar collapse. The state class lives on <html> so the head
+   script can restore it before first paint. Mobile keeps the full drawer
+   because every rule below is scoped to the lg breakpoint. */
+@media (min-width: 1024px) {
+    .sidebar-collapsed #drawer-navigation {
+        width: 4rem;
+    }
+
+    .sidebar-collapsed #main-content {
+        margin-left: 4rem;
+    }
+
+    .sidebar-collapsed #drawer-navigation .sidebar-heading,
+    .sidebar-collapsed #drawer-navigation .sidebar-label,
+    .sidebar-collapsed #drawer-navigation .sidebar-user {
+        display: none;
+    }
+
+    .sidebar-collapsed #drawer-navigation .sidebar-link {
+        justify-content: center;
+    }
+
+    .sidebar-collapsed #sidebar-toggle .sidebar-toggle-icon {
+        transform: rotate(180deg);
+    }
+}
+
 /* chart styles */
+/* Tooltip text is 13px, so it needs the full 4.5:1 and not the 3:1 that
+   "large text" would allow. The dark pairs below were failing:
+     text-gray-400 on bg-gray-700   4.06:1  AA-large only, not AA
+     title  on bg-gray-600          2.98:1  FAIL
+   Both are now gray-100: 9.37:1 and 6.87:1. */
 .apexcharts-tooltip {
-  @apply bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-0 rounded-lg shadow-lg !important;
+  @apply bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-100 border-0 rounded-lg shadow-lg !important;
 }
 
 .apexcharts-tooltip .apexcharts-tooltip-title {
-  @apply py-2 px-4 bg-gray-100 dark:bg-gray-600 border-b border-gray-200 dark:border-gray-500 !important;
+  @apply py-2 px-4 bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-500 !important;
 }
 
 .apexcharts-xaxistooltip {
-  @apply text-gray-500 border-0 bg-white dark:bg-gray-700 dark:text-gray-300 rounded-lg shadow-lg !important;
+  @apply text-gray-700 dark:text-gray-100 border-0 bg-white dark:bg-gray-700 rounded-lg shadow-lg !important;
 }
 
 .apexcharts-tooltip .apexcharts-tooltip-text-y-value {

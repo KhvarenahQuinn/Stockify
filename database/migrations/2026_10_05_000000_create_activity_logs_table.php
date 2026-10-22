@@ -13,12 +13,19 @@ return new class extends Migration
     {
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained();
+            // Nullable so system-initiated actions can be logged without a user,
+            // matching ActivityLoggerService::log()'s User|int|null contract.
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('action', 100);
             $table->text('description');
             $table->string('ip_address', 45);
             $table->timestamps();
+            // ReportService filters/sorts on these columns; without them the
+            // activity report and the DISTINCT action dropdown scan the table.
             $table->index('user_id');
+            $table->index('action');
+            $table->index('created_at');
+            $table->index(['user_id', 'created_at']);
         });
     }
 

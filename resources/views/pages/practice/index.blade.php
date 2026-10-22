@@ -1,3 +1,3 @@
-@extends('layouts.dashboard')
+@extends('layouts.app')
 @section('content')
 @endsection

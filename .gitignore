@@ -1,19 +1,49 @@
-/.phpunit.cache
+# Dependencies
 /node_modules
+/vendor
+
+# Compiled front-end assets (Vite)
 /public/build
 /public/hot
+
+# Laravel runtime files
+/.phpunit.cache
 /public/storage
 /storage/*.key
-/vendor
-.env
-.env.backup
-.env.production
-Homestead.json
-Homestead.yaml
-auth.json
+
+# Environment files. .env.example stays tracked as the template.
+/.env
+/.env.*
+!.env.example
+
+# Logs
 npm-debug.log
 yarn-error.log
+
+# Test artefacts
+/coverage
+/.phpunit.result.cache
+
+# Temporary audit report produced by `ocr session export`
+/review.html
+
+# Editor and OS tooling (not part of the application)
 /.fleet
 /.idea
 /.vscode
 /.skills
+# Local Kilo config; the skills.paths entries are absolute per-machine paths.
+/kilo.json
+.aider*
+.DS_Store
+Thumbs.db
+
+# Flowbite template scaffolding, used only by the VS Code "Template"
+# extension and never by the build or the application.
+/.templates
+/template.config.js
+
+# Legacy Homestead
+Homestead.json
+Homestead.yaml
+auth.json

@@ -1,3 +1,7 @@
+const themeToggleBtn = document.getElementById('theme-toggle');
+
+// The guest layout (login) has no toggle, so bail out instead of throwing.
+if (themeToggleBtn) {
 const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
 const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
 
@@ -7,8 +11,6 @@ if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localS
 } else {
     themeToggleDarkIcon.classList.remove('hidden');
 }
-
-const themeToggleBtn = document.getElementById('theme-toggle');
 
 let event = new Event('dark-mode');
 
@@ -42,3 +44,4 @@ themeToggleBtn.addEventListener('click', function() {
     document.dispatchEvent(event);
     
 });
+}
