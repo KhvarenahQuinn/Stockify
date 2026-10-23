@@ -12,7 +12,7 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Stock Opname History') }}</h1>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ __('Every completed physical count and the reconciliation it applied.') }}
+                {{ __('Every physical count, its verification status, and the adjustment it applied.') }}
             </p>
         </div>
 
@@ -78,7 +78,7 @@
     <div class="relative overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
         <table class="w-full text-left text-sm text-gray-500 dark:text-gray-400">
             <caption class="sr-only">
-                {{ __('Completed stock opnames with reference, date, auditor, item count, net variance and status') }}
+                {{ __('Stock opnames with reference, date, auditor, item count, net variance, verification status and available actions') }}
             </caption>
             <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                 <tr>
@@ -102,6 +102,10 @@
                         $netTone = $net > 0
                             ? 'text-blue-700 dark:text-blue-400'
                             : ($net < 0 ? 'text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-300');
+
+                        $canVerify = $sheet->isAwaitingVerification()
+                            && (auth()->user()?->can('verify', $sheet) ?? false)
+                            && Route::has('stock-opnames.verify');
                     @endphp
 
                     <tr class="border-b border-gray-100 last:border-b-0 dark:border-gray-700">
@@ -135,11 +139,23 @@
                         </td>
 
                         <td class="px-6 py-4 text-right">
-                            <a href="{{ route('stock-opnames.show', $sheet) }}"
-                               class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700">
-                                {{ __('View details') }}
-                                <span class="sr-only">{{ __('for count') }} {{ $sheet->reference }}</span>
-                            </a>
+                            <div class="flex items-center justify-end gap-2">
+                                @if ($canVerify)
+                                    <button type="button"
+                                            data-modal-target="verify-opname-{{ $sheet->id }}"
+                                            data-modal-toggle="verify-opname-{{ $sheet->id }}"
+                                            class="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                                        {{ __('Verify & Apply Adjustment') }}
+                                        <span class="sr-only">{{ __('for count') }} {{ $sheet->reference }}</span>
+                                    </button>
+                                @endif
+
+                                <a href="{{ route('stock-opnames.show', $sheet) }}"
+                                   class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700">
+                                    {{ __('View details') }}
+                                    <span class="sr-only">{{ __('for count') }} {{ $sheet->reference }}</span>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                 @empty
@@ -158,6 +174,14 @@
             </tbody>
         </table>
     </div>
+
+    @foreach ($sheets as $sheet)
+        @if ($sheet->isAwaitingVerification()
+            && (auth()->user()?->can('verify', $sheet) ?? false)
+            && Route::has('stock-opnames.verify'))
+            <x-opnames.verify-modal :sheet="$sheet" />
+        @endif
+    @endforeach
 
     <div class="mt-4">{{ $sheets->links() }}</div>
 </div>

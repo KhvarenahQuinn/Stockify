@@ -25,6 +25,13 @@ class TransactionPolicy
     protected array $approvers = ['warehouse_manager', 'admin'];
 
     /**
+     * Roles permitted to correct stock through a manual adjustment.
+     *
+     * @var array<int, string>
+     */
+    protected array $adjusters = ['warehouse_manager'];
+
+    /**
      * Determine whether the user can view any transactions.
      */
     public function viewAny(User $user): bool
@@ -62,6 +69,14 @@ class TransactionPolicy
     public function approve(User $user): bool
     {
         return $this->hasRole($user, $this->approvers);
+    }
+
+    /**
+     * Record a manual stock correction (custom policy method).
+     */
+    public function adjust(User $user): bool
+    {
+        return $this->hasRole($user, $this->adjusters);
     }
 
     /**

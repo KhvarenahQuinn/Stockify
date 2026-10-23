@@ -17,10 +17,14 @@
     $unit = $transaction->product?->unit ?? __('unit');
     $variance = $transaction->inspectionVariance();
     $blockedByDiscrepancy = $transaction->displayStatus() === StockTransaction::DISPLAY_DISCREPANCY;
+    // An uncounted movement has no evidence behind it, so approval is disabled
+    // even if someone opens this dialog by hand. The service enforces the same
+    // rule; this is the explanation, not the only guard.
+    $blockedByInspection = $isApprove && ! $transaction->hasInspection();
 
     // What the ledger will look like once this lands, so the manager is
     // approving a number rather than an intention.
-    $projected = $isApprove && ! $blockedByDiscrepancy
+    $projected = $isApprove && ! $blockedByDiscrepancy && ! $blockedByInspection
         ? ($transaction->type === 'IN'
             ? (int) $transaction->product?->current_stock + (int) $transaction->quantity
             : (int) $transaction->product?->current_stock - (int) $transaction->quantity)
@@ -89,6 +93,18 @@
                 @endif
             </dl>
 
+            @if ($blockedByInspection)
+                <p class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                    <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                    </svg>
+                    <span>
+                        <strong class="font-semibold">{{ __('Floor count required') }}</strong>
+                        {{ __('No one has inspected this movement yet. Record the physical count before approving it, so the ledger reflects what is actually on the shelf.') }}
+                    </span>
+                </p>
+            @endif
+
             @if ($blockedByDiscrepancy)
                 <p class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-900/40 dark:text-red-100">
                     <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -123,11 +139,11 @@
         </button>
 
         <button type="submit"
-                @disabled($isApprove && $blockedByDiscrepancy)
+                @disabled($isApprove && ($blockedByDiscrepancy || $blockedByInspection))
                 class="rounded-lg px-4 py-2.5 text-sm font-medium text-white focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 {{ $isApprove
                     ? 'bg-green-700 hover:bg-green-800 focus:ring-green-300 dark:focus:ring-green-900'
                     : 'bg-red-700 hover:bg-red-800 focus:ring-red-300 dark:focus:ring-red-900' }}">
-            {{ __($isApprove ? 'Approve and update stock' : 'Reject movement') }}
+            {{ __($isApprove ? ($blockedByInspection ? 'Floor count required' : 'Approve and update stock') : 'Reject movement') }}
         </button>
     </x-slot:footer>
 </x-modal-shell>

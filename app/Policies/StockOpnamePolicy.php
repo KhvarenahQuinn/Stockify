@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\StockOpname;
+use App\Models\StockOpnameSheet;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -35,13 +36,13 @@ class StockOpnamePolicy
     /**
      * Determine whether the user can view the count.
      */
-    public function view(User $user, StockOpname $opname): bool
+    public function view(User $user, StockOpname|StockOpnameSheet $opname): bool
     {
         return true; // all authenticated roles can view individual counts
     }
 
     /**
-     * Staff input a physical count; the result is always a DRAFT.
+     * Staff input a physical count; the result is always submitted for review.
      */
     public function create(User $user): bool
     {
@@ -50,6 +51,9 @@ class StockOpnamePolicy
 
     /**
      * Verify a count and apply the stock adjustment (custom policy method).
+     *
+     * Shared by the single-product count and the multi-line sheet: both are
+     * proposals until a manager or admin explicitly applies them.
      */
     public function verify(User $user): bool
     {
@@ -59,7 +63,7 @@ class StockOpnamePolicy
     /**
      * Determine whether the user can delete the count.
      */
-    public function delete(User $user, StockOpname $opname): bool
+    public function delete(User $user, StockOpname|StockOpnameSheet $opname): bool
     {
         return false; // No delete per RBAC matrix; counts are an audit trail
     }

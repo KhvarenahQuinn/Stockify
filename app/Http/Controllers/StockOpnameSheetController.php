@@ -59,7 +59,25 @@ class StockOpnameSheetController extends Controller
         $summary = __(':count products', ['count' => $count]);
 
         return redirect()->route('stock-opnames.show', $sheet)
-            ->with('success', __('Count :reference submitted: :summary counted, stock reconciled.', ['reference' => $sheet->reference, 'summary' => $summary]));
+            ->with('success', __('Count :reference submitted: :summary counted, stock unchanged until a manager verifies it.', ['reference' => $sheet->reference, 'summary' => $summary]));
+    }
+
+    /**
+     * Manager or admin verification: apply the counted quantities and write
+     * the resulting adjustments to the movement ledger.
+     */
+    public function verify(int $sheet, StockOpnameSheetService $service): RedirectResponse
+    {
+        $this->authorize('verify', $service->findSheet($sheet));
+
+        try {
+            $verified = $service->verifySheet($sheet);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('stock-opnames.show', $verified)
+            ->with('success', __('Count :reference verified. The official stock balance now matches the physical count.', ['reference' => $verified->reference]));
     }
 
     /**

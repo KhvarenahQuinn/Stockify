@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class StockTransaction extends Model
 {
@@ -41,6 +41,8 @@ class StockTransaction extends Model
         'approved_by',
         'inspected_by',
         'type',
+        'is_adjustment',
+        'adjustment_reason',
         'quantity',
         'stock_before',
         'stock_after',
@@ -55,6 +57,7 @@ class StockTransaction extends Model
     ];
 
     protected $casts = [
+        'is_adjustment' => 'boolean',
         'quantity' => 'integer',
         'stock_before' => 'integer',
         'stock_after' => 'integer',
@@ -119,6 +122,14 @@ class StockTransaction extends Model
     public function hasInspection(): bool
     {
         return $this->inspected_at !== null;
+    }
+
+    /**
+     * A manual correction rather than a supplier receipt or customer issue.
+     */
+    public function isAdjustment(): bool
+    {
+        return (bool) $this->is_adjustment;
     }
 
     /**

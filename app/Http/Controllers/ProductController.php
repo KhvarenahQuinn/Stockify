@@ -64,6 +64,10 @@ class ProductController extends Controller
             'image',
             'attribute_value_ids',
             'remove_image',
+            // The edit form no longer offers this, and the request no longer
+            // validates it. Stripping it here keeps direct JSON clients on the
+            // same ledger-only path.
+            'current_stock',
         ]);
 
         // An explicit removal beats leaving the file input untouched; the file
@@ -97,7 +101,7 @@ class ProductController extends Controller
      */
     public function import(ImportProductRequest $request): RedirectResponse
     {
-        $import = new ProductImport();
+        $import = new ProductImport;
 
         Excel::import($import, $request->file('file'));
 
@@ -115,6 +119,6 @@ class ProductController extends Controller
 
     public function template(): BinaryFileResponse
     {
-        return Excel::download(new ProductTemplateExport(), 'product-import-template.xlsx');
+        return Excel::download(new ProductTemplateExport, 'product-import-template.xlsx');
     }
 }

@@ -118,8 +118,8 @@ class ProductManagementTest extends TestCase
     }
 
     /**
- * @dataProvider writeRefusedRoles
- */
+     * @dataProvider writeRefusedRoles
+     */
     public function test_write_endpoints_are_refused_outside_the_manager_role(string $roleName): void
     {
         $this->signInAs($roleName);
@@ -295,6 +295,108 @@ class ProductManagementTest extends TestCase
         $this->assertSame('Renamed Carton', $product->fresh()->name);
     }
 
+    public function test_editing_a_product_ignores_current_stock(): void
+    {
+        $this->signInAs('warehouse_manager');
+        $product = $this->makeProduct(['current_stock' => 240]);
+
+        $this->put(route('products.update', $product), [
+            'name' => 'Renamed Carton',
+            'current_stock' => 999,
+        ])->assertRedirect(route('products.index'));
+
+        $this->assertSame('Renamed Carton', $product->fresh()->name);
+        $this->assertSame(240, $product->fresh()->current_stock, 'Product edits must not write the stock balance.');
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_the_edit_form_removes_the_stock_field_and_points_to_the_ledger(): void
+    {
+        $source = file_get_contents(resource_path('views/products/partials/edit-product-modal.blade.php'));
+
+        $this->assertStringNotContainsString('name="current_stock"', $source);
+        $this->assertStringContainsString('Record stock adjustment', $source);
+        $this->assertStringContainsString('stock-transactions.adjustments.create', $source);
+        $this->assertStringContainsString('Stock is read-only here.', $source);
+    }
+
+    public function test_a_manager_adjusts_stock_through_the_movement_ledger(): void
+    {
+        $manager = $this->signInAs('warehouse_manager');
+        $product = $this->makeProduct(['current_stock' => 240]);
+
+        $this->post(route('stock-transactions.adjustments.store'), [
+            'product_id' => $product->id,
+            'type' => 'OUT',
+            'quantity' => 15,
+            'adjustment_reason' => 'Damaged by water in aisle B; disposal ticket DSP-2026-0042.',
+        ])->assertSessionHas('success');
+
+        $this->assertSame(225, $product->fresh()->current_stock);
+
+        $this->assertDatabaseHas('stock_transactions', [
+            'product_id' => $product->id,
+            'user_id' => $manager->id,
+            'approved_by' => $manager->id,
+            'type' => 'OUT',
+            'is_adjustment' => true,
+            'adjustment_reason' => 'Damaged by water in aisle B; disposal ticket DSP-2026-0042.',
+            'quantity' => 15,
+            'stock_before' => 240,
+            'stock_after' => 225,
+            'status' => 'APPROVED',
+        ]);
+
+        $reference = \App\Models\StockTransaction::query()->firstOrFail()->reference_number;
+        $this->assertStringStartsWith('ADJ-', $reference);
+    }
+
+    public function test_a_stock_adjustment_requires_a_reason(): void
+    {
+        $this->signInAs('warehouse_manager');
+        $product = $this->makeProduct(['current_stock' => 240]);
+
+        $this->from(route('stock-transactions.adjustments.create'))
+            ->post(route('stock-transactions.adjustments.store'), [
+                'product_id' => $product->id,
+                'type' => 'OUT',
+                'quantity' => 15,
+            ])
+            ->assertRedirect(route('stock-transactions.adjustments.create'))
+            ->assertSessionHasErrors('adjustment_reason');
+
+        $this->assertSame(240, $product->fresh()->current_stock);
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_staff_cannot_record_a_stock_adjustment(): void
+    {
+        $this->signInAs('warehouse_staff');
+        $product = $this->makeProduct(['current_stock' => 240]);
+
+        $this->post(route('stock-transactions.adjustments.store'), [
+            'product_id' => $product->id,
+            'type' => 'OUT',
+            'quantity' => 15,
+            'adjustment_reason' => 'Trying to bypass the manager control.',
+        ])->assertForbidden();
+
+        $this->assertSame(240, $product->fresh()->current_stock);
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_the_adjustment_form_preselects_the_product_from_the_edit_modal_link(): void
+    {
+        $this->signInAs('warehouse_manager');
+        $product = $this->makeProduct();
+
+        $this->get(route('stock-transactions.adjustments.create', ['product' => $product->id]))
+            ->assertOk()
+            ->assertSee('Stock adjustment')
+            ->assertSee('name="adjustment_reason"', escape: false)
+            ->assertSee('data-stock="'.$product->current_stock.'"', escape: false);
+    }
+
     public function test_the_import_endpoint_rejects_a_file_that_is_not_a_spreadsheet(): void
     {
         $this->signInAs('warehouse_manager');
@@ -331,13 +433,13 @@ class ProductManagementTest extends TestCase
 
         // Excel::toArray() wraps the sheet in an outer array, so the heading row
         // sits at [0][0].
-        $sheet = \Maatwebsite\Excel\Facades\Excel::toArray(new \App\Exports\ProductTemplateExport(), $path)[0] ?? [];
+        $sheet = \Maatwebsite\Excel\Facades\Excel::toArray(new \App\Exports\ProductTemplateExport, $path)[0] ?? [];
 
         $this->assertNotEmpty($sheet, 'The template must be a readable workbook, not an empty stub.');
 
         // The headings have to match ProductImport::rules() or a downloaded
         // template will not import back in.
-        $this->assertSame(array_keys((new \App\Imports\ProductImport())->rules()), $sheet[0]);
+        $this->assertSame(array_keys((new \App\Imports\ProductImport)->rules()), $sheet[0]);
 
         // One worked example row, so the sheet is not a list of empty headers.
         $this->assertCount(2, $sheet);

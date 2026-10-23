@@ -8,7 +8,7 @@
 --}}
 <x-modal-shell id="confirm-opname-modal"
                title="{{ __('Submit this count?') }}"
-               subtitle="{{ __('Check the differences before the stock balance changes.') }}"
+               subtitle="{{ __('Check the differences before sending this count for verification.') }}"
                maxWidth="max-w-4xl">
 
     <x-slot:body>
@@ -20,8 +20,8 @@
                       d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>
             </svg>
             <p class="text-sm text-amber-900 dark:text-amber-100">
-                <span class="font-semibold">{{ __('Submitting overwrites the official stock balance') }}</span>
-                {{ __('with the counts below, for every product on this sheet — including the ones that matched. The count is kept as an audit record, but the running stock figures change immediately.') }}
+                <span class="font-semibold">{{ __('Submitting saves the count but does not change the official stock balance') }}</span>
+                {{ __('A manager or admin must verify this sheet before any difference is applied to the movement ledger. The count is kept as an audit record either way.') }}
             </p>
         </div>
 
@@ -51,7 +51,7 @@
         </dl>
 
         <h3 class="mt-5 text-sm font-semibold text-gray-900 dark:text-white">
-            {{ __('Differences to apply') }}
+            {{ __('Differences the manager will review') }}
         </h3>
 
         <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
@@ -73,7 +73,7 @@
         </div>
 
         <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-            {{ __('Products whose count matched the system figure are not listed. They are still applied.') }}
+            {{ __('Products whose count matched the system figure are not listed. They remain on the sheet as evidence they were checked.') }}
         </p>
     </x-slot:body>
 
@@ -85,7 +85,7 @@
 
         <button type="button" data-opname-confirm-submit
                 class="rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-400">
-            {{ __('Submit and update stock') }}
+            {{ __('Submit for verification') }}
         </button>
     </x-slot:footer>
 </x-modal-shell>

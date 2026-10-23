@@ -24,6 +24,8 @@ class StockOpnameSheet extends Model
     protected $fillable = [
         'reference',
         'auditor_id',
+        'verified_by',
+        'verified_at',
         'audit_date',
         'status',
         'notes',
@@ -31,6 +33,7 @@ class StockOpnameSheet extends Model
 
     protected $casts = [
         'audit_date' => 'date',
+        'verified_at' => 'datetime',
     ];
 
     public function auditor(): BelongsTo
@@ -38,9 +41,30 @@ class StockOpnameSheet extends Model
         return $this->belongsTo(User::class, 'auditor_id');
     }
 
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(StockOpnameSheetItem::class);
+    }
+
+    /**
+     * Waiting for a manager or admin to apply the counted quantities.
+     */
+    public function isAwaitingVerification(): bool
+    {
+        return $this->status === self::STATUS_SUBMITTED;
+    }
+
+    /**
+     * The count has been verified and the official balance was reconciled.
+     */
+    public function isApplied(): bool
+    {
+        return $this->status === self::STATUS_ADJUSTED;
     }
 
     /**

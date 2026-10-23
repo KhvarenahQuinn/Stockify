@@ -354,10 +354,50 @@ class GoodsMovementWorkflowTest extends TestCase
         $this->assertSame(StockTransactionService::STATUS_PENDING, $transaction->refresh()->status);
     }
 
+    public function test_an_uninspected_movement_cannot_be_approved_even_by_direct_post(): void
+    {
+        $this->signIn('warehouse_manager');
+        $transaction = $this->pendingMovement();
+
+        $this->patch(route('stock-transactions.approve', $transaction), [
+            'notes' => 'Trying to approve without a floor count.',
+        ])->assertSessionHas('error');
+
+        $this->assertSame(StockTransactionService::STATUS_PENDING, $transaction->refresh()->status);
+        $this->assertSame(40, $transaction->product->refresh()->current_stock);
+    }
+
+    public function test_the_approval_queue_disables_approval_until_a_floor_count_exists(): void
+    {
+        $this->signIn('warehouse_manager');
+        $transaction = $this->pendingMovement();
+
+        $body = $this->get(route('stock-transactions.approvals'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('Floor count required before approval.', $body);
+        $this->assertMatchesRegularExpression(
+            '/data-modal-target="review-approve-'.$transaction->id.'"[\s\S]{0,400}?disabled/',
+            $body,
+            'The approve control must be disabled while the movement is uninspected.'
+        );
+
+        $transaction->update(['inspected_at' => now(), 'inspected_quantity' => 25]);
+
+        $body = $this->get(route('stock-transactions.approvals'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('Floor count required before approval.', $body);
+        $this->assertDoesNotMatchRegularExpression(
+            '/data-modal-target="review-approve-'.$transaction->id.'"[\s\S]{0,400}?disabled/',
+            $body,
+            'A counted movement should be approvable again.'
+        );
+    }
+
     public function test_approving_posts_the_stock_change_and_writes_the_snapshot(): void
     {
         $this->signIn('warehouse_manager');
         $transaction = $this->pendingMovement();
+        $transaction->update(['inspected_at' => now(), 'inspected_quantity' => 25]);
 
         $this->patch(route('stock-transactions.approve', $transaction), [
             'notes' => 'Delivery note matches, 25 cartons counted.',
@@ -375,6 +415,7 @@ class GoodsMovementWorkflowTest extends TestCase
     {
         $this->signIn('warehouse_manager');
         $transaction = $this->pendingMovement(['type' => 'OUT', 'destination' => 'Cikarang']);
+        $transaction->update(['inspected_at' => now(), 'inspected_quantity' => 25]);
 
         $this->patch(route('stock-transactions.approve', $transaction), [
             'notes' => 'Loaded onto the 08:00 truck.',
@@ -390,6 +431,7 @@ class GoodsMovementWorkflowTest extends TestCase
     {
         $this->signIn('warehouse_manager');
         $transaction = $this->pendingMovement();
+        $transaction->update(['inspected_at' => now(), 'inspected_quantity' => 25]);
 
         $this->patch(route('stock-transactions.approve', $transaction))
             ->assertSessionHasErrors('notes');
@@ -401,6 +443,7 @@ class GoodsMovementWorkflowTest extends TestCase
     {
         $manager = $this->signIn('warehouse_manager');
         $transaction = $this->pendingMovement(['user_id' => $manager->id]);
+        $transaction->update(['inspected_at' => now(), 'inspected_quantity' => 25]);
 
         $this->patch(route('stock-transactions.approve', $transaction), [
             'notes' => 'Approving my own request should not work.',

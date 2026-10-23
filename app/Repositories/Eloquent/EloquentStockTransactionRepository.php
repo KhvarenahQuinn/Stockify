@@ -38,6 +38,16 @@ class EloquentStockTransactionRepository extends BaseEloquentRepository implemen
             ->count() + 1;
     }
 
+    public function nextAdjustmentSequence(string $date): int
+    {
+        $day = Carbon::createFromFormat('Ymd', $date)->startOfDay();
+
+        return (int) $this->modelClass::query()
+            ->where('is_adjustment', true)
+            ->whereBetween('created_at', [$day, $day->copy()->endOfDay()])
+            ->count() + 1;
+    }
+
     public function paginatedWithRelations(int $perPage = 15, array $filters = []): LengthAwarePaginator
     {
         $query = $this->modelClass::query()

@@ -17,6 +17,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\Product::class => \App\Policies\ProductPolicy::class,
         \App\Models\StockTransaction::class => \App\Policies\TransactionPolicy::class,
         \App\Models\StockOpname::class => \App\Policies\StockOpnamePolicy::class,
+        \App\Models\StockOpnameSheet::class => \App\Policies\StockOpnamePolicy::class,
         \App\Models\Category::class => \App\Policies\CategoryPolicy::class,
         \App\Models\Supplier::class => \App\Policies\SupplierPolicy::class,
         \App\Models\Attribute::class => \App\Policies\AttributePolicy::class,

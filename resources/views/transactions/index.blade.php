@@ -32,6 +32,11 @@
                 ? route('stock-transactions.approvals')
                 : null;
 
+        $adjustmentAction = (auth()->user()?->can('adjust', \App\Models\StockTransaction::class) ?? false)
+            && Route::has('stock-transactions.adjustments.create')
+                ? route('stock-transactions.adjustments.create')
+                : null;
+
         // The controller hands over a paginator, but a half-wired endpoint may
         // pass a plain collection, so totals are read through whichever it is.
         $paginator = $transactions instanceof LengthAwarePaginator ? $transactions : null;
@@ -66,6 +71,13 @@
                     <a href="{{ $approvalsAction }}"
                        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-gray-700">
                         {{ __('Approvals') }}
+                    </a>
+                @endif
+
+                @if ($adjustmentAction)
+                    <a href="{{ $adjustmentAction }}"
+                       class="inline-flex items-center gap-2 rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50 focus:outline-none focus:ring-4 focus:ring-amber-200 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40 dark:focus:ring-amber-900">
+                        {{ __('Stock adjustment') }}
                     </a>
                 @endif
 
@@ -177,19 +189,29 @@
                                 </th>
 
                                 <td class="min-w-[9rem] px-4 py-3 align-top">
-                                    <span @class([
-                                        'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                                        'bg-blue-100 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100' => $transaction->type === 'IN',
-                                        'bg-indigo-100 text-indigo-900 dark:bg-indigo-900/50 dark:text-indigo-100' => $transaction->type === 'OUT',
-                                    ])>
-                                        {{ __($transaction->type === 'IN' ? 'Goods in' : 'Goods out') }}
-                                    </span>
+                                    @if ($transaction->is_adjustment)
+                                        <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
+                                            {{ __('Stock adjustment') }}
+                                        </span>
 
-                                    <span class="mt-1.5 block max-w-[13rem] truncate text-xs text-gray-500 dark:text-gray-400">
-                                        {{ $transaction->type === 'IN'
-                                            ? ($transaction->supplier?->name ?? __('No supplier recorded'))
-                                            : ($transaction->destination ?: __('No destination recorded')) }}
-                                    </span>
+                                        <span class="mt-1.5 block max-w-[13rem] truncate text-xs text-gray-500 dark:text-gray-400" title="{{ $transaction->adjustment_reason }}">
+                                            {{ $transaction->adjustment_reason ?: __('No reason recorded') }}
+                                        </span>
+                                    @else
+                                        <span @class([
+                                            'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                                            'bg-blue-100 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100' => $transaction->type === 'IN',
+                                            'bg-indigo-100 text-indigo-900 dark:bg-indigo-900/50 dark:text-indigo-100' => $transaction->type === 'OUT',
+                                        ])>
+                                            {{ __($transaction->type === 'IN' ? 'Goods in' : 'Goods out') }}
+                                        </span>
+
+                                        <span class="mt-1.5 block max-w-[13rem] truncate text-xs text-gray-500 dark:text-gray-400">
+                                            {{ $transaction->type === 'IN'
+                                                ? ($transaction->supplier?->name ?? __('No supplier recorded'))
+                                                : ($transaction->destination ?: __('No destination recorded')) }}
+                                        </span>
+                                    @endif
                                 </td>
 
                                 <td class="min-w-[11rem] px-4 py-3 align-top">

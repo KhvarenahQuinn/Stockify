@@ -115,6 +115,10 @@ class ProductService extends BaseService
             /** @var Product $product */
             $product = $this->productRepository->findOrFail($id);
 
+            // Stock is owned by the movement ledger. Even a direct service call
+            // cannot smuggle a new balance in through the product update path.
+            unset($attributes['current_stock']);
+
             // Honour an explicitly supplied SKU; otherwise keep the existing one
             // so a category change never silently rewrites the SKU. Only legacy
             // rows without a SKU get one generated.
@@ -176,11 +180,11 @@ class ProductService extends BaseService
      */
     public function generateSku(int $categoryId): string
     {
-        $prefix = self::SKU_PREFIX . '-' . $this->categoryToken($categoryId);
+        $prefix = self::SKU_PREFIX.'-'.$this->categoryToken($categoryId);
         $sequence = $this->productRepository->nextSkuSequence($categoryId);
 
         do {
-            $candidate = $prefix . '-' . str_pad(
+            $candidate = $prefix.'-'.str_pad(
                 (string) $sequence,
                 self::SKU_SEQUENCE_PAD,
                 '0',

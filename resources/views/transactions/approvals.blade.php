@@ -202,27 +202,41 @@
                             <x-transactions.queue-row :transaction="$transaction">
                                 <x-slot:actions>
                                     @if ($canDecide)
-                                        <div class="inline-flex items-center justify-end gap-1">
-                                            <button type="button"
-                                                    data-modal-target="review-approve-{{ $transaction->id }}"
-                                                    data-modal-toggle="review-approve-{{ $transaction->id }}"
-                                                    @disabled($transaction->displayStatus() === StockTransaction::DISPLAY_DISCREPANCY)
-                                                    class="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-green-800 focus:outline-none focus:ring-4 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-green-900">
-                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-                                                </svg>
-                                                {{ __('Approve') }}
-                                            </button>
+                                        @php
+                                            $awaitingInspection = $transaction->displayStatus() === StockTransaction::DISPLAY_PENDING_INSPECTION;
+                                        @endphp
 
-                                            <button type="button"
-                                                    data-modal-target="review-reject-{{ $transaction->id }}"
-                                                    data-modal-toggle="review-reject-{{ $transaction->id }}"
-                                                    class="inline-flex items-center gap-1.5 rounded-lg bg-red-700 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-red-800 focus:outline-none focus:ring-4 focus:ring-red-300 dark:focus:ring-red-900">
-                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                                                </svg>
-                                                {{ __('Reject') }}
-                                            </button>
+                                        <div class="flex flex-col items-end gap-1">
+                                            <div class="inline-flex items-center justify-end gap-1">
+                                                <button type="button"
+                                                        data-modal-target="review-approve-{{ $transaction->id }}"
+                                                        data-modal-toggle="review-approve-{{ $transaction->id }}"
+                                                        @disabled($awaitingInspection || $transaction->displayStatus() === StockTransaction::DISPLAY_DISCREPANCY)
+                                                        title="{{ $awaitingInspection ? __('Floor count required before approval.') : null }}"
+                                                        class="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-green-800 focus:outline-none focus:ring-4 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-green-900">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                                    </svg>
+                                                    {{ __('Approve') }}
+                                                </button>
+
+                                                <button type="button"
+                                                        data-modal-target="review-reject-{{ $transaction->id }}"
+                                                        data-modal-toggle="review-reject-{{ $transaction->id }}"
+                                                        class="inline-flex items-center gap-1.5 rounded-lg bg-red-700 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-red-800 focus:outline-none focus:ring-4 focus:ring-red-300 dark:focus:ring-red-900">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                    {{ __('Reject') }}
+                                                </button>
+                                            </div>
+
+                                            @if ($awaitingInspection)
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
+                                                    <span class="h-1.5 w-1.5 rounded-full bg-amber-700 dark:bg-amber-400" aria-hidden="true"></span>
+                                                    {{ __('Floor count required before approval.') }}
+                                                </span>
+                                            @endif
                                         </div>
                                     @else
                                         <span class="text-xs text-gray-500 dark:text-gray-400">{{ __('No decision endpoint') }}</span>

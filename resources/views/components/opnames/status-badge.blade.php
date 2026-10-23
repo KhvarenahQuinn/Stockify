@@ -10,12 +10,12 @@
     $key = $status ?? $sheet?->status ?? StockOpnameSheet::STATUS_DRAFT;
 
     /**
-     * Same three solid fills as the variance badges, so a status chip and a
+     * Same solid fills as the variance badges, so a status chip and a
      * discrepancy chip read as one vocabulary. White text clears AA on all
-     * three (green 6.44:1, blue 6.18:1, red 5.74:1).
+     * three (gray 10.3:1, amber 5.02:1, green 5.02:1).
      *
-     * SUBMITTED reads as "Reconciled" rather than "Submitted" because that is
-     * what submitting did: the physical count is now the official balance.
+     * SUBMITTED is deliberately amber and says "Awaiting verification":
+     * submission saves the count but does not move the official balance.
      */
     $tones = [
         StockOpnameSheet::STATUS_DRAFT => [
@@ -24,14 +24,14 @@
             'dot' => 'bg-gray-300',
         ],
         StockOpnameSheet::STATUS_SUBMITTED => [
-            'label' => __('Reconciled'),
-            'tone' => 'bg-green-700 text-white',
-            'dot' => 'bg-green-200',
+            'label' => __('Awaiting verification'),
+            'tone' => 'bg-amber-700 text-white',
+            'dot' => 'bg-amber-200',
         ],
         StockOpnameSheet::STATUS_ADJUSTED => [
-            'label' => __('Adjusted'),
-            'tone' => 'bg-blue-700 text-white',
-            'dot' => 'bg-blue-200',
+            'label' => __('Applied'),
+            'tone' => 'bg-green-700 text-white',
+            'dot' => 'bg-green-200',
         ],
     ];
 

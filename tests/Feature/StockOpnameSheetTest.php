@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Role;
 use App\Models\StockOpnameSheet;
 use App\Models\StockOpnameSheetItem;
+use App\Models\StockTransaction;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -211,14 +212,151 @@ class StockOpnameSheetTest extends TestCase
         $this->assertSame(1, StockOpnameSheet::query()->firstOrFail()->totalMatched());
     }
 
-    public function test_submitting_reconciles_the_official_stock_balance(): void
+    public function test_submitting_does_not_change_the_official_stock_balance(): void
     {
         $user = $this->actingAsRole();
         $product = $this->product('SKU-1', 50);
 
         $this->submit([['product_id' => $product->id, 'physical_stock' => 46]], $user)->assertRedirect();
 
+        $this->assertSame(46, StockOpnameSheet::query()->firstOrFail()->items()->firstOrFail()->physical_stock);
+        $this->assertSame(50, $product->fresh()->current_stock, 'The count is a proposal until a manager verifies it.');
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_a_manager_verification_reconciles_stock_and_writes_the_adjustment_ledger(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+
+        $this->submit([
+            ['product_id' => $product->id, 'physical_stock' => 46, 'reason' => 'Two cartons damaged in transit'],
+        ], $staff)->assertRedirect();
+
+        $sheet = StockOpnameSheet::query()->firstOrFail();
+        $manager = $this->actingAsRole('warehouse_manager');
+
+        $this->patch(route('stock-opnames.verify', $sheet))
+            ->assertRedirect(route('stock-opnames.show', $sheet))
+            ->assertSessionHas('success');
+
+        $sheet->refresh();
+        $this->assertSame(StockOpnameSheet::STATUS_ADJUSTED, $sheet->status);
+        $this->assertSame($manager->id, $sheet->verified_by);
+        $this->assertNotNull($sheet->verified_at);
         $this->assertSame(46, $product->fresh()->current_stock);
+
+        $this->assertDatabaseHas('stock_transactions', [
+            'product_id' => $product->id,
+            'user_id' => $manager->id,
+            'approved_by' => $manager->id,
+            'type' => 'OUT',
+            'is_adjustment' => true,
+            'adjustment_reason' => 'Two cartons damaged in transit',
+            'quantity' => 4,
+            'stock_before' => 50,
+            'stock_after' => 46,
+            'status' => 'APPROVED',
+        ]);
+
+        $this->assertStringStartsWith('ADJ-', StockTransaction::query()->firstOrFail()->reference_number);
+    }
+
+    public function test_an_admin_can_verify_a_sheet(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+
+        $this->submit([['product_id' => $product->id, 'physical_stock' => 52]], $staff)->assertRedirect();
+
+        $admin = $this->actingAsRole('admin');
+        $sheet = StockOpnameSheet::query()->firstOrFail();
+
+        $this->patch(route('stock-opnames.verify', $sheet))
+            ->assertRedirect(route('stock-opnames.show', $sheet))
+            ->assertSessionHas('success');
+
+        $this->assertSame(52, $product->fresh()->current_stock);
+        $this->assertSame($admin->id, $sheet->fresh()->verified_by);
+        $this->assertDatabaseHas('stock_transactions', [
+            'product_id' => $product->id,
+            'type' => 'IN',
+            'is_adjustment' => true,
+            'stock_before' => 50,
+            'stock_after' => 52,
+        ]);
+    }
+
+    public function test_verifying_a_matched_sheet_posts_no_adjustment_rows(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+
+        $this->submit([['product_id' => $product->id, 'physical_stock' => 50]], $staff)->assertRedirect();
+
+        $this->actingAsRole('warehouse_manager');
+        $sheet = StockOpnameSheet::query()->firstOrFail();
+
+        $this->patch(route('stock-opnames.verify', $sheet))->assertRedirect();
+
+        $this->assertSame(StockOpnameSheet::STATUS_ADJUSTED, $sheet->fresh()->status);
+        $this->assertSame(50, $product->fresh()->current_stock);
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_staff_cannot_verify_a_sheet(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+
+        $this->submit([['product_id' => $product->id, 'physical_stock' => 46]], $staff)->assertRedirect();
+
+        $sheet = StockOpnameSheet::query()->firstOrFail();
+
+        $this->patch(route('stock-opnames.verify', $sheet))->assertForbidden();
+
+        $this->assertSame(50, $product->fresh()->current_stock);
+        $this->assertSame(StockOpnameSheet::STATUS_SUBMITTED, $sheet->fresh()->status);
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
+    public function test_a_sheet_cannot_be_verified_twice(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+
+        $this->submit([['product_id' => $product->id, 'physical_stock' => 46]], $staff)->assertRedirect();
+
+        $this->actingAsRole('warehouse_manager');
+        $sheet = StockOpnameSheet::query()->firstOrFail();
+
+        $this->patch(route('stock-opnames.verify', $sheet))->assertRedirect();
+        $this->assertDatabaseCount('stock_transactions', 1);
+
+        $this->from(route('stock-opnames.show', $sheet))
+            ->patch(route('stock-opnames.verify', $sheet))
+            ->assertRedirect(route('stock-opnames.show', $sheet))
+            ->assertSessionHas('error');
+
+        $this->assertSame(1, StockTransaction::query()->count());
+        $this->assertSame(46, $product->fresh()->current_stock);
+    }
+
+    public function test_only_managers_and_admins_see_the_verification_action(): void
+    {
+        $staff = $this->actingAsRole('warehouse_staff');
+        $product = $this->product('SKU-1', 50);
+        $sheet = $this->seedSheet('SOP-20261017-001', '2026-10-17', $staff, [[$product, 47]]);
+
+        $staffBody = $this->get(route('stock-opnames.show', $sheet))->assertOk()->getContent();
+        $this->assertStringNotContainsString('Verify &amp; Apply Adjustment', $staffBody);
+
+        $this->actingAsRole('warehouse_manager');
+
+        $managerBody = $this->get(route('stock-opnames.show', $sheet))->assertOk()->getContent();
+        $this->assertStringContainsString('Verify &amp; Apply Adjustment', $managerBody);
+        $this->assertStringContainsString('Awaiting manager verification', $managerBody);
+        $this->assertStringContainsString('verify-opname-'.$sheet->id, $managerBody);
     }
 
     public function test_the_reference_follows_the_sop_yyyymmdd_xxx_format(): void
@@ -362,7 +500,7 @@ class StockOpnameSheetTest extends TestCase
         $this->assertStringContainsString('15 Oct 2026', $body);
         $this->assertStringContainsString($auditor->name, $body);
         $this->assertStringContainsString('-3', $body, 'the net variance is shown');
-        $this->assertStringContainsString('Reconciled', $body);
+        $this->assertStringContainsString('Awaiting verification', $body);
         $this->assertStringContainsString('View details', $body);
     }
 

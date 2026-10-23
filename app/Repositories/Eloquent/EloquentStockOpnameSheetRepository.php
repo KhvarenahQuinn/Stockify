@@ -38,7 +38,7 @@ class EloquentStockOpnameSheetRepository extends BaseEloquentRepository implemen
     public function paginatedWithTotals(int $perPage = 15, array $filters = []): LengthAwarePaginator
     {
         $query = $this->modelClass::query()
-            ->with('auditor')
+            ->with(['auditor', 'verifier', 'items.product'])
             ->withCount('items as total_items')
             ->withCount(['items as total_matched' => fn ($q) => $q->where('variance', 0)])
             ->withSum('items as total_net_variance', 'variance')

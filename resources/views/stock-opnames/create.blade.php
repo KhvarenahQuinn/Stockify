@@ -47,7 +47,7 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Stock Opname') }}</h1>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ __('Count what is on the shelf. The difference against system stock is worked out as you type.') }}
+                {{ __('Count what is on the shelf. The difference against system stock is worked out as you type, then a manager verifies the sheet before stock changes.') }}
             </p>
         </div>
 

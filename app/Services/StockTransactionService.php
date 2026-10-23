@@ -182,6 +182,163 @@ class StockTransactionService extends BaseService
     }
 
     /**
+     * Apply a manual stock correction and write it to the ledger.
+     *
+     * Adjustments are not goods movements, so they skip the inspection queue.
+     * They still use the same ledger: the manager's identity, the reason and
+     * both stock figures are stored on the row, and current_stock is only ever
+     * changed through this method.
+     *
+     * @param  array<string, mixed>  $attributes
+     *
+     * @throws DomainException when the direction, quantity or reason is invalid
+     */
+    public function adjustStock(array $attributes): StockTransaction
+    {
+        $direction = strtoupper((string) ($attributes['type'] ?? ''));
+
+        if (! in_array($direction, [self::TYPE_IN, self::TYPE_OUT], true)) {
+            throw new DomainException(__('The adjustment direction must be IN or OUT.'));
+        }
+
+        $reason = trim((string) ($attributes['adjustment_reason'] ?? ''));
+
+        if ($reason === '') {
+            throw new DomainException(
+                __('A reason is required for every stock adjustment.'),
+                422,
+                ['adjustment_reason' => [__('A reason is required for every stock adjustment.')]]
+            );
+        }
+
+        $quantity = (int) ($attributes['quantity'] ?? 0);
+
+        if ($quantity < 1) {
+            throw new DomainException(
+                __('The adjustment quantity must be at least 1.'),
+                422,
+                ['quantity' => [__('The adjustment quantity must be at least 1.')]]
+            );
+        }
+
+        /** @var StockTransaction $transaction */
+        $transaction = DB::transaction(function () use ($attributes, $direction, $quantity, $reason) {
+            /** @var Product $product */
+            $product = Product::query()
+                ->whereKey((int) ($attributes['product_id'] ?? 0))
+                ->lockForUpdate()
+                ->first();
+
+            if ($product === null) {
+                throw new DomainException(__('The product for this adjustment no longer exists.'), 422);
+            }
+
+            $stockBefore = (int) $product->current_stock;
+            $stockAfter = $this->calculateStockAfter($stockBefore, $quantity, $direction, $product->name);
+
+            return $this->createAdjustmentRecord(
+                $product,
+                $stockAfter,
+                $reason,
+                auth()->id(),
+                __('Manual stock adjustment')
+            );
+        });
+
+        return $transaction->refresh()->load(['product', 'user', 'approver']);
+    }
+
+    /**
+     * Apply a correction discovered by a stock opname verification.
+     *
+     * Returns null when the counted quantity already matches the live balance:
+     * a matched line is still part of the audit sheet, but it is not a stock
+     * movement and does not need a second ledger row.
+     *
+     * @throws DomainException when the product is gone or the count is negative
+     */
+    public function recordAdjustmentForProduct(
+        int $productId,
+        int $newStock,
+        string $reason,
+        ?int $userId = null,
+        ?string $note = null
+    ): ?StockTransaction {
+        if ($newStock < 0) {
+            throw new DomainException(__('Stock cannot be adjusted below zero.'), 422);
+        }
+
+        return DB::transaction(function () use ($productId, $newStock, $reason, $userId, $note) {
+            /** @var Product|null $product */
+            $product = Product::query()
+                ->whereKey($productId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($product === null) {
+                throw new DomainException(__('The related product no longer exists.'), 422);
+            }
+
+            if ((int) $product->current_stock === $newStock) {
+                return null;
+            }
+
+            return $this->createAdjustmentRecord(
+                $product,
+                $newStock,
+                $reason,
+                $userId ?? auth()->id(),
+                $note
+            );
+        });
+    }
+
+    /**
+     * Persist one adjustment row and move the product balance.
+     *
+     * The caller must hold the product row lock. Keeping creation in one place
+     * means an opname verification and a manual correction cannot produce two
+     * subtly different ledger shapes.
+     */
+    protected function createAdjustmentRecord(
+        Product $product,
+        int $newStock,
+        string $reason,
+        ?int $userId,
+        ?string $note = null
+    ): StockTransaction {
+        $stockBefore = (int) $product->current_stock;
+        $quantity = abs($newStock - $stockBefore);
+        $type = $newStock >= $stockBefore ? self::TYPE_IN : self::TYPE_OUT;
+
+        /** @var StockTransaction $transaction */
+        $transaction = $this->repository->create([
+            'reference_number' => $this->generateAdjustmentReference(),
+            'product_id' => $product->id,
+            'user_id' => $userId ?? auth()->id(),
+            'approved_by' => $userId ?? auth()->id(),
+            'type' => $type,
+            'is_adjustment' => true,
+            'adjustment_reason' => $reason,
+            'quantity' => $quantity,
+            'stock_before' => $stockBefore,
+            'stock_after' => $newStock,
+            'status' => self::STATUS_APPROVED,
+            'notes' => $note,
+        ]);
+
+        $product->update(['current_stock' => $newStock]);
+
+        $this->activityLogger->log(
+            auth()->user(),
+            'stock_adjustment.recorded',
+            "Adjusted {$product->sku} from {$stockBefore} to {$newStock}: {$reason}"
+        );
+
+        return $transaction;
+    }
+
+    /**
      * Record the physical count made against a submitted request.
      *
      * The status column is untouched: inspection refines what PENDING means, so
@@ -238,6 +395,16 @@ class StockTransactionService extends BaseService
             $transaction = $this->lockTransaction($id);
 
             $this->assertStatus($transaction, self::STATUS_PENDING);
+
+            // A manager cannot approve what nobody has counted. The inspection
+            // is the evidence that the shelf matches the paperwork; without it
+            // the approval would post an unverified quantity.
+            if (! $transaction->hasInspection()) {
+                throw new DomainException(
+                    __('This movement must be physically counted before it can be approved. Record the floor count first.'),
+                    422
+                );
+            }
 
             // Separation of duties: the person who submitted a movement cannot
             // also be the one who approves it, even if they hold a manager role.
@@ -367,6 +534,29 @@ class StockTransactionService extends BaseService
         $date = Carbon::now()->format('Ymd');
         $prefix = 'TRX-'.strtoupper($type).'-'.$date.'-';
         $sequence = $this->stockTransactionRepository->nextDailySequence(strtoupper($type), $date);
+
+        do {
+            $candidate = $prefix.str_pad(
+                (string) $sequence,
+                self::REFERENCE_SEQUENCE_PAD,
+                '0',
+                STR_PAD_LEFT
+            );
+
+            $sequence++;
+        } while ($this->stockTransactionRepository->referenceExists($candidate));
+
+        return $candidate;
+    }
+
+    /**
+     * Build a reference like ADJ-20261023-001, skipping any that already exists.
+     */
+    public function generateAdjustmentReference(): string
+    {
+        $date = Carbon::now()->format('Ymd');
+        $prefix = 'ADJ-'.$date.'-';
+        $sequence = $this->stockTransactionRepository->nextAdjustmentSequence($date);
 
         do {
             $candidate = $prefix.str_pad(

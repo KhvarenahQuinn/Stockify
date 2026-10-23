@@ -1,8 +1,8 @@
 <?php
 
+use App\Http\Controllers\AttributeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
-use App\Http\Controllers\AttributeController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProductController;
@@ -64,8 +64,9 @@ Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware('auth');
 
 // Stock opnames: one audit sheet counts many products in a single session.
-// Staff, managers and admins may run a count and submit it; submitting is what
-// reconciles the official stock balance, so the confirm dialog gates the write.
+// Staff, managers and admins may run a count and submit it. Submission only
+// saves the physical quantities; a manager or admin verifies before any balance
+// moves, so the confirm dialog explains the hand-off rather than a write.
 Route::middleware(['auth', 'role:warehouse_staff,warehouse_manager,admin'])
     ->prefix('stock-opnames')
     ->name('stock-opnames.')
@@ -73,6 +74,9 @@ Route::middleware(['auth', 'role:warehouse_staff,warehouse_manager,admin'])
         Route::get('/', [StockOpnameSheetController::class, 'index'])->name('index');
         Route::get('create', [StockOpnameSheetController::class, 'create'])->name('create');
         Route::post('/', [StockOpnameSheetController::class, 'store'])->name('store');
+        Route::patch('{sheet}/verify', [StockOpnameSheetController::class, 'verify'])
+            ->middleware('role:warehouse_manager,admin')
+            ->name('verify');
         Route::get('{sheet}', [StockOpnameSheetController::class, 'show'])->name('show');
     });
 
@@ -218,6 +222,16 @@ Route::middleware(['auth', 'role:warehouse_manager,admin'])
         Route::patch('{transaction}/approve', [StockTransactionController::class, 'approve'])->name('approve');
         Route::patch('{transaction}/reject', [StockTransactionController::class, 'reject'])->name('reject');
         Route::patch('{transaction}/complete', [StockTransactionController::class, 'complete'])->name('complete');
+    });
+
+// Manual corrections are a manager control. They are posted as ledger rows,
+// never as a direct write to products.current_stock.
+Route::middleware(['auth', 'role:warehouse_manager'])
+    ->prefix('stock-transactions')
+    ->name('stock-transactions.')
+    ->group(function () {
+        Route::get('adjustments/create', [StockTransactionController::class, 'createAdjustment'])->name('adjustments.create');
+        Route::post('adjustments', [StockTransactionController::class, 'storeAdjustment'])->name('adjustments.store');
     });
 
 Route::middleware(['auth', 'role:warehouse_staff,warehouse_manager,admin'])

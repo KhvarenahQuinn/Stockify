@@ -36,7 +36,6 @@ class UpdateProductRequest extends FormRequest
             'buy_price' => ['sometimes', 'required', 'numeric', 'min:0'],
             'sell_price' => ['sometimes', 'required', 'numeric', 'min:0'],
             'min_stock' => ['sometimes', 'required', 'integer', 'min:0'],
-            'current_stock' => ['sometimes', 'integer', 'min:0'],
             'unit' => ['sometimes', 'required', 'string', 'max:20'],
             'image' => [
                 'sometimes',
@@ -68,8 +67,6 @@ class UpdateProductRequest extends FormRequest
             'sell_price.min' => __('The sell price may not be negative.'),
             'min_stock.integer' => __('The minimum stock must be a whole number.'),
             'min_stock.min' => __('The minimum stock may not be negative.'),
-            'current_stock.integer' => __('The current stock must be a whole number.'),
-            'current_stock.min' => __('The current stock may not be negative.'),
             'unit.max' => __('The unit may not be greater than 20 characters.'),
             'image.image' => __('The product image must be a valid image file.'),
             'image.mimes' => __('The product image must be a JPEG, PNG or WebP file.'),
@@ -88,7 +85,6 @@ class UpdateProductRequest extends FormRequest
             'buy_price' => __('buy price'),
             'sell_price' => __('sell price'),
             'min_stock' => __('minimum stock'),
-            'current_stock' => __('current stock'),
             'unit' => __('unit'),
         ];
     }

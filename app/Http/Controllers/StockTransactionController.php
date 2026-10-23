@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\DomainException;
 use App\Http\Requests\InspectStockTransactionRequest;
 use App\Http\Requests\ReviewStockTransactionRequest;
+use App\Http\Requests\StoreStockAdjustmentRequest;
 use App\Http\Requests\StoreStockTransactionRequest;
 use App\Models\StockTransaction;
 use App\Services\StockTransactionService;
@@ -80,6 +81,42 @@ class StockTransactionController extends Controller
 
         return redirect()->route('stock-transactions.show', $transaction)
             ->with('success', __(':reference submitted. It now sits in the inspection queue.', ['reference' => $transaction->reference_number]));
+    }
+
+    /**
+     * Form for a manual stock correction.
+     */
+    public function createAdjustment(StockTransactionService $service): View
+    {
+        $this->authorize('adjust', StockTransaction::class);
+
+        return view('transactions.adjustment', [
+            'products' => $service->productsForMovement(),
+            'selectedProductId' => request()->integer('product') ?: null,
+            'storeAction' => route('stock-transactions.adjustments.store'),
+        ]);
+    }
+
+    /**
+     * Apply a manual correction immediately and record it in the ledger.
+     */
+    public function storeAdjustment(StoreStockAdjustmentRequest $request, StockTransactionService $service): RedirectResponse
+    {
+        try {
+            $transaction = $service->adjustStock($request->validated());
+        } catch (DomainException $e) {
+            return back()
+                ->withInput()
+                ->withErrors($e->errors)
+                ->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('stock-transactions.show', $transaction)
+            ->with('success', __(':reference adjustment applied. Stock moved from :before to :after.', [
+                'reference' => $transaction->reference_number,
+                'before' => $transaction->stock_before,
+                'after' => $transaction->stock_after,
+            ]));
     }
 
     /**

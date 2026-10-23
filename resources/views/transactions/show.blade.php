@@ -14,6 +14,7 @@
 
         $isPending = $transaction->status === StockTransaction::STATUS_PENDING;
         $hasDiscrepancy = $transaction->displayStatus() === StockTransaction::DISPLAY_DISCREPANCY;
+        $awaitingInspection = $transaction->displayStatus() === StockTransaction::DISPLAY_PENDING_INSPECTION;
 
         $canDecide = $isPending
             && Route::has('stock-transactions.approve')
@@ -79,7 +80,11 @@
                         <div>
                             <dt class="text-xs text-gray-500 dark:text-gray-400">{{ __('Direction') }}</dt>
                             <dd class="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">
-                                {{ __($transaction->type === 'IN' ? 'Goods receipt (in)' : 'Goods issue (out)') }}
+                                @if ($transaction->is_adjustment)
+                                    {{ __($transaction->type === 'IN' ? 'Stock adjustment (increase)' : 'Stock adjustment (decrease)') }}
+                                @else
+                                    {{ __($transaction->type === 'IN' ? 'Goods receipt (in)' : 'Goods issue (out)') }}
+                                @endif
                             </dd>
                         </div>
 
@@ -140,6 +145,17 @@
                             <div class="sm:col-span-2">
                                 <dt class="text-xs text-gray-500 dark:text-gray-400">{{ __('Notes from the submitter') }}</dt>
                                 <dd class="mt-0.5 text-sm text-gray-900 dark:text-white">{{ $transaction->notes }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($transaction->is_adjustment)
+                            <div class="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+                                <dt class="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                                    {{ __('Adjustment reason') }}
+                                </dt>
+                                <dd class="mt-1 text-sm text-amber-950 dark:text-amber-100">
+                                    {{ $transaction->adjustment_reason ?: __('No reason recorded') }}
+                                </dd>
                             </div>
                         @endif
                     </dl>
@@ -242,10 +258,18 @@
                                 <button type="button"
                                         data-modal-target="review-approve-{{ $transaction->id }}"
                                         data-modal-toggle="review-approve-{{ $transaction->id }}"
-                                        @disabled($hasDiscrepancy)
+                                        @disabled($hasDiscrepancy || $awaitingInspection)
+                                        title="{{ $awaitingInspection ? __('Floor count required before approval.') : null }}"
                                         class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-800 focus:outline-none focus:ring-4 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-green-900">
-                                    {{ __('Approve and update stock') }}
+                                    {{ $awaitingInspection ? __('Floor count required before approval') : __('Approve and update stock') }}
                                 </button>
+
+                                @if ($awaitingInspection)
+                                    <span class="flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                                        <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-700 dark:bg-amber-400" aria-hidden="true"></span>
+                                        {{ __('A staff member must record the physical count before this movement can be approved.') }}
+                                    </span>
+                                @endif
 
                                 <button type="button"
                                         data-modal-target="review-reject-{{ $transaction->id }}"

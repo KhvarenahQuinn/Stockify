@@ -45,6 +45,7 @@ class StockOpnameSheetService extends BaseService
     public function __construct(
         StockOpnameSheetRepository $repository,
         protected readonly ActivityLoggerService $activityLogger,
+        protected readonly StockTransactionService $stockTransactions,
     ) {
         parent::__construct($repository);
         $this->sheetRepository = $repository;
@@ -66,7 +67,7 @@ class StockOpnameSheetService extends BaseService
         /** @var StockOpnameSheet $sheet */
         $sheet = $this->sheetRepository->findOrFail($id);
 
-        return $sheet->load(['auditor', 'items.product']);
+        return $sheet->load(['auditor', 'verifier', 'items.product']);
     }
 
     /**
@@ -148,13 +149,8 @@ class StockOpnameSheetService extends BaseService
 
             StockOpnameSheetItem::query()->insert($rows);
 
-            // Reconcile the official balance to the physical count while the
-            // rows are still locked by this transaction.
-            foreach ($rows as $row) {
-                $product = $products->get((int) $row['product_id']);
-                $product->update(['current_stock' => $row['physical_stock']]);
-            }
-
+            // Do not touch current_stock here. The sheet is a proposal until a
+            // manager or admin verifies it; submitting only snapshots the count.
             $deficit = collect($rows)->where('variance', '<', 0)->sum('variance');
             $surplus = collect($rows)->where('variance', '>', 0)->sum('variance');
 
@@ -162,7 +158,7 @@ class StockOpnameSheetService extends BaseService
                 $user,
                 'stock_opname_sheet.submitted',
                 sprintf(
-                    'Counted %d product(s) on %s: %d matched, %d short, %d over; stock reconciled by %s',
+                    'Submitted %d counted product(s) on %s: %d matched, %d short, %d over; awaiting verification by %s',
                     count($rows),
                     $sheet->reference,
                     count(array_filter($rows, fn (array $r) => $r['variance'] === 0)),
@@ -175,7 +171,94 @@ class StockOpnameSheetService extends BaseService
             return $sheet;
         });
 
-        return $sheet->load(['auditor', 'items.product']);
+        return $sheet->load(['auditor', 'verifier', 'items.product']);
+    }
+
+    /**
+     * Verify a submitted sheet and apply its physical counts.
+     *
+     * The sheet and every affected product are locked together, so a movement
+     * cannot change a balance between the comparison and the write. Each line
+     * whose live balance differs from the count produces one ADJ row in the
+     * movement ledger; matched lines remain on the sheet without a duplicate
+     * zero-quantity movement.
+     *
+     * @throws DomainException when the sheet is already applied or the product is gone
+     */
+    public function verifySheet(int $id): StockOpnameSheet
+    {
+        $verifier = auth()->user();
+
+        /** @var StockOpnameSheet $sheet */
+        $sheet = DB::transaction(function () use ($id, $verifier) {
+            /** @var StockOpnameSheet|null $sheet */
+            $sheet = StockOpnameSheet::query()
+                ->whereKey($id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($sheet === null) {
+                throw new DomainException(__('Stock opname sheet not found.'), 404);
+            }
+
+            if (! in_array($sheet->status, [StockOpnameSheet::STATUS_SUBMITTED, StockOpnameSheet::STATUS_DRAFT], true)) {
+                throw new DomainException(
+                    __('This sheet has already been applied. Only a submitted count can be verified.'),
+                    422
+                );
+            }
+
+            $sheet->load('items');
+            $productIds = $sheet->items->pluck('product_id')->unique()->values()->all();
+
+            // Lock every row the verification can write before reading them.
+            Product::query()
+                ->whereIn('id', $productIds)
+                ->lockForUpdate()
+                ->get();
+
+            $adjusted = 0;
+
+            foreach ($sheet->items as $item) {
+                $reason = filled($item->reason)
+                    ? (string) $item->reason
+                    : __('Stock opname :reference', ['reference' => $sheet->reference]);
+
+                $transaction = $this->stockTransactions->recordAdjustmentForProduct(
+                    (int) $item->product_id,
+                    (int) $item->physical_stock,
+                    $reason,
+                    $verifier?->id,
+                    __('Verified stock opname :reference', ['reference' => $sheet->reference])
+                );
+
+                if ($transaction !== null) {
+                    $adjusted++;
+                }
+            }
+
+            $sheet->update([
+                'status' => StockOpnameSheet::STATUS_ADJUSTED,
+                'verified_by' => $verifier?->id,
+                'verified_at' => now(),
+            ]);
+
+            $this->activityLogger->log(
+                $verifier,
+                'stock_opname_sheet.verified',
+                sprintf(
+                    'Verified %s: %d line(s) applied, %d stock adjustment(s) posted by %s',
+                    $sheet->reference,
+                    $sheet->items->count(),
+                    $adjusted,
+                    $verifier?->name ?? 'system'
+                )
+            );
+
+            return $sheet;
+        });
+
+        return $sheet->refresh()->load(['auditor', 'verifier', 'items.product']);
     }
 
     /**

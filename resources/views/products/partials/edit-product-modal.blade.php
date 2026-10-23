@@ -48,10 +48,30 @@
                           :value="$product->min_stock"
                           hint="{{ __('Below this the product is flagged low stock.') }}" />
 
-            <x-form.input name="current_stock" label="{{ __('Current stock') }}" type="number" required
-                          inputmode="numeric" min="0" step="1"
-                          :value="$product->current_stock"
-                          hint="{{ __('Adjusting this here bypasses the stock ledger.') }}" />
+            <div class="sm:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-600 dark:bg-gray-700/50">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {{ __('Current stock') }}
+                        </p>
+                        <p class="mt-0.5 font-mono text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {{ format_number($product->current_stock) }}
+                            <span class="text-xs font-normal text-gray-500 dark:text-gray-400">{{ $product->unit }}</span>
+                        </p>
+                    </div>
+
+                    @if (Route::has('stock-transactions.adjustments.create'))
+                        <a href="{{ route('stock-transactions.adjustments.create', ['product' => $product->id]) }}"
+                           class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:border-gray-500 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
+                            {{ __('Record stock adjustment') }}
+                        </a>
+                    @endif
+                </div>
+
+                <p class="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                    {{ __('Stock is read-only here. Every correction must go through a Stock Adjustment movement so the ledger keeps a permanent reason and audit trail.') }}
+                </p>
+            </div>
 
             <div class="sm:col-span-2">
                 <x-form.textarea name="description" label="{{ __('Description') }}"
