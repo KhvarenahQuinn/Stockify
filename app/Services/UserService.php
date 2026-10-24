@@ -54,7 +54,7 @@ class UserService extends BaseService
     /**
      * Create a new user with hashed password.
      *
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     public function createUser(array $attributes): User
     {
@@ -74,10 +74,30 @@ class UserService extends BaseService
     /**
      * Update an existing user. Re-hashes password if present.
      *
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     public function updateUser(int $id, array $attributes): User
     {
+        /** @var User $user */
+        $user = $this->findUser($id);
+
+        // Demoting or deactivating the only active administrator would lock
+        // every administrator out of the application.
+        if ($this->isLastActiveAdministrator($user)) {
+            $nextRoleId = $attributes['role_id'] ?? $user->role_id;
+            $nextIsAdmin = Role::query()
+                ->whereKey($nextRoleId)
+                ->where('name', 'admin')
+                ->exists();
+            $nextIsActive = ($attributes['status'] ?? $user->status) === 'active';
+
+            abort_if(
+                ! $nextIsAdmin || ! $nextIsActive,
+                422,
+                __('The last active administrator cannot be deactivated or demoted.'),
+            );
+        }
+
         $passwordChanged = ! empty($attributes['password']);
 
         if ($passwordChanged) {
@@ -125,6 +145,15 @@ class UserService extends BaseService
     public function toggleUserStatus(int $id): User
     {
         /** @var User $user */
+        $user = $this->findUser($id);
+
+        abort_if(
+            $this->isLastActiveAdministrator($user),
+            422,
+            __('The last active administrator cannot be deactivated.'),
+        );
+
+        /** @var User $user */
         $user = $this->repository->toggleStatus($id);
 
         // Log status toggle
@@ -140,6 +169,52 @@ class UserService extends BaseService
     public function findByEmail(string $email): ?User
     {
         return $this->repository->findByEmail($email);
+    }
+
+    /**
+     * Delete a user after enforcing the administrator safety rails.
+     *
+     * The checks live here as well as in the controller so a console command,
+     * queued job or future API endpoint cannot bypass them.
+     */
+    public function deleteUser(int $id): bool
+    {
+        $user = $this->findUser($id);
+
+        abort_if(
+            (int) $user->id === (int) auth()->id(),
+            422,
+            __('You cannot delete your own account.'),
+        );
+
+        abort_if(
+            $this->isLastActiveAdministrator($user),
+            422,
+            __('The last active administrator cannot be deleted.'),
+        );
+
+        return $this->repository->delete($id);
+    }
+
+    /**
+     * Number of administrators that are currently allowed to sign in.
+     */
+    public function activeAdministratorCount(): int
+    {
+        return User::query()
+            ->whereHas('role', fn ($query) => $query->where('name', 'admin'))
+            ->where('status', 'active')
+            ->count();
+    }
+
+    /**
+     * Whether the user is the only active administrator left.
+     */
+    public function isLastActiveAdministrator(User $user): bool
+    {
+        return $user->isAdmin()
+            && $user->isActive()
+            && $this->activeAdministratorCount() <= 1;
     }
 
     /**

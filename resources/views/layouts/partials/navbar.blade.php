@@ -92,6 +92,13 @@
                     </div>
 
                     <div class="py-2">
+                        @if (Route::has('preferences.edit'))
+                            <a href="{{ route('preferences.edit') }}"
+                               class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600">
+                                {{ __('Language') }}
+                            </a>
+                        @endif
+
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit"

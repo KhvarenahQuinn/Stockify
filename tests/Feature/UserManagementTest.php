@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Services\UserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
 
 /**
@@ -210,5 +212,77 @@ class UserManagementTest extends TestCase
             ->assertRedirect(route('admin.users.index'));
 
         $this->assertNotSame('old-remember-token', $user->fresh()->remember_token);
+    }
+
+    public function test_an_admin_cannot_delete_their_own_account(): void
+    {
+        $this->actingAs($this->admin)
+            ->from(route('admin.users.index'))
+            ->delete(route('admin.users.destroy', $this->admin))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHas('error', __('You cannot delete your own account.'));
+
+        $this->assertDatabaseHas('users', ['id' => $this->admin->id]);
+        $this->assertAuthenticatedAs($this->admin);
+    }
+
+    public function test_the_last_active_administrator_cannot_be_deleted_from_the_service(): void
+    {
+        $staff = $this->makeUser('Siti Rahayu', 'siti@stockify.test', 'warehouse_staff');
+        $this->actingAs($staff);
+
+        try {
+            app(UserService::class)->deleteUser($this->admin->id);
+            $this->fail('The last active administrator must not be deletable.');
+        } catch (HttpExceptionInterface $exception) {
+            $this->assertSame(422, $exception->getStatusCode());
+            $this->assertSame(
+                __('The last active administrator cannot be deleted.'),
+                $exception->getMessage()
+            );
+        }
+
+        $this->assertDatabaseHas('users', ['id' => $this->admin->id]);
+    }
+
+    public function test_the_last_active_administrator_cannot_be_deactivated(): void
+    {
+        $this->actingAs($this->admin)
+            ->from(route('admin.users.index'))
+            ->patch(route('admin.users.toggle-status', $this->admin))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHas('error', __('The last active administrator cannot be deactivated.'));
+
+        $this->assertSame('active', $this->admin->fresh()->status);
+    }
+
+    public function test_the_last_active_administrator_cannot_be_demoted(): void
+    {
+        $staffRoleId = Role::where('name', 'warehouse_staff')->value('id');
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.users.index'))
+            ->put(route('admin.users.update', $this->admin), [
+                'name' => $this->admin->name,
+                'email' => $this->admin->email,
+                'role_id' => $staffRoleId,
+                'status' => 'active',
+            ])
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHas('error', __('The last active administrator cannot be deactivated or demoted.'));
+
+        $this->assertSame($this->adminRole->id, $this->admin->fresh()->role_id);
+    }
+
+    public function test_an_admin_can_still_delete_another_account(): void
+    {
+        $user = $this->makeUser('Siti Rahayu', 'siti@stockify.test', 'warehouse_staff');
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.users.destroy', $user))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 }

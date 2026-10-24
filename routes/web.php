@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PreferencesController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
@@ -100,7 +101,16 @@ Route::middleware(['auth', 'role:warehouse_manager,admin'])
         Route::get('activity/export', [ReportController::class, 'exportActivity'])->name('activity.export');
     });
 
-// Application settings are administrator-only.
+// Application settings are administrator-only. Language is a per-user
+// preference, so it lives on /preferences and is open to every signed-in role.
+Route::middleware('auth')
+    ->prefix('preferences')
+    ->name('preferences.')
+    ->group(function () {
+        Route::get('/', [PreferencesController::class, 'edit'])->name('edit');
+        Route::put('/', [PreferencesController::class, 'update'])->name('update');
+    });
+
 Route::middleware(['auth', 'role:admin'])
     ->prefix('settings')
     ->name('settings.')

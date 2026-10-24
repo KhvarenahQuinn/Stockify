@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -24,6 +25,45 @@ class AppShellLayoutTest extends TestCase
         $role = Role::create(['name' => 'admin', 'display_name' => 'Admin']);
 
         $this->actingAs(User::factory()->create(['role_id' => $role->id]));
+    }
+
+    /**
+     * Every web response, signed in or not, must carry the hardening headers.
+     */
+    public function test_web_responses_carry_the_security_headers(): void
+    {
+        $this->assertSecurityHeaders($this->get(route('login'))->assertOk());
+    }
+
+    public function test_authenticated_web_responses_carry_the_security_headers(): void
+    {
+        $this->signInAsAdmin();
+
+        $this->assertSecurityHeaders($this->get(route('dashboard'))->assertOk());
+    }
+
+    /**
+     * The shell no longer depends on fonts.googleapis.com, so the strict CSP
+     * cannot silently fall back to a different typeface.
+     */
+    public function test_the_shell_does_not_load_third_party_fonts(): void
+    {
+        $body = $this->get(route('login'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('fonts.googleapis.com', $body);
+        $this->assertStringNotContainsString('fonts.gstatic.com', $body);
+    }
+
+    private function assertSecurityHeaders(TestResponse $response): void
+    {
+        $response
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('X-Frame-Options', 'DENY')
+            ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+            ->assertHeader(
+                'Content-Security-Policy',
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; frame-ancestors 'none'; object-src 'none'"
+            );
     }
 
     /**

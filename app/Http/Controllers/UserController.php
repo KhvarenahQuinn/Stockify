@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\Role;
@@ -11,6 +10,7 @@ use App\Services\UserService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class UserController extends Controller
 {
@@ -79,7 +79,12 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, int $id, UserService $userService, ActivityLoggerService $activityLogger): RedirectResponse
     {
-        $user = $userService->updateUser($id, $request->validated());
+        try {
+            $user = $userService->updateUser($id, $request->validated());
+        } catch (HttpExceptionInterface $exception) {
+            return $this->guardFailure($exception);
+        }
+
         $activityLogger->log(auth()->user(), 'user.updated', "Updated user {$user->name}");
 
         return redirect()->route('admin.users.index')
@@ -91,7 +96,12 @@ class UserController extends Controller
      */
     public function toggleStatus(int $id, UserService $userService, ActivityLoggerService $activityLogger): RedirectResponse
     {
-        $user = $userService->toggleUserStatus($id);
+        try {
+            $user = $userService->toggleUserStatus($id);
+        } catch (HttpExceptionInterface $exception) {
+            return $this->guardFailure($exception);
+        }
+
         $action = $user->status === 'active' ? 'user.activated' : 'user.deactivated';
         $activityLogger->log(auth()->user(), $action, "Toggled user {$user->name} status to {$user->status}");
 
@@ -107,10 +117,34 @@ class UserController extends Controller
         $user = $userService->findUser($id);
         $name = $user->name;
 
-        $userService->delete($id);
+        try {
+            abort_if(
+                (int) $user->id === (int) auth()->id(),
+                422,
+                __('You cannot delete your own account.'),
+            );
+
+            $userService->deleteUser($id);
+        } catch (HttpExceptionInterface $exception) {
+            return $this->guardFailure($exception);
+        }
+
         $activityLogger->log(auth()->user(), 'user.deleted', "Deleted user {$name}");
 
         return redirect()->route('admin.users.index')
             ->with('success', __('User deleted successfully.'));
+    }
+
+    /**
+     * Turn a 422 safety-rail abort into a localized toast instead of an error
+     * page. Other HTTP errors keep their normal handling.
+     */
+    private function guardFailure(HttpExceptionInterface $exception): RedirectResponse
+    {
+        if ($exception->getStatusCode() !== 422) {
+            throw $exception;
+        }
+
+        return back()->with('error', $exception->getMessage());
     }
 }
