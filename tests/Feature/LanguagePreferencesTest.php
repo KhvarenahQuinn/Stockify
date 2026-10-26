@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\SetLocaleMiddleware;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -106,6 +107,72 @@ class LanguagePreferencesTest extends TestCase
                 ->assertOk()
                 ->assertSee(route('preferences.edit'), escape: false);
         }
+    }
+
+    public function test_the_login_screen_offers_both_languages(): void
+    {
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee(route('locale.update'), escape: false)
+            ->assertSee('name="locale"', escape: false)
+            ->assertSee('value="en"', escape: false)
+            ->assertSee('value="id"', escape: false)
+            ->assertSee('English')
+            ->assertSee('Bahasa Indonesia');
+    }
+
+    public function test_a_guest_can_switch_the_login_language(): void
+    {
+        $this->from(route('login'))
+            ->post(route('locale.update'), ['locale' => 'id'])
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('locale', 'id')
+            ->assertSessionHas(SetLocaleMiddleware::GUEST_LOCALE_KEY, 'id');
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('Masuk ke akun Anda')
+            ->assertSee('Kata sandi');
+    }
+
+    public function test_an_unsupported_login_language_is_rejected(): void
+    {
+        $this->from(route('login'))
+            ->post(route('locale.update'), ['locale' => 'fr'])
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors('locale');
+    }
+
+    public function test_a_login_language_choice_is_saved_to_the_account(): void
+    {
+        $user = $this->makeUser('warehouse_staff');
+
+        $this->from(route('login'))
+            ->post(route('locale.update'), ['locale' => 'id']);
+
+        $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertSame('id', $user->fresh()->locale);
+    }
+
+    public function test_an_untouched_login_form_does_not_overwrite_the_saved_language(): void
+    {
+        $user = $this->makeUser('warehouse_staff');
+        $user->forceFill(['locale' => 'id'])->save();
+
+        $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertSame('id', $user->fresh()->locale);
+
+        $this->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Dasbor');
     }
 
     public function test_application_settings_stay_admin_only(): void

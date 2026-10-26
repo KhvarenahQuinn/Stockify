@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AttributeController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\LoginLocaleController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
@@ -55,6 +56,11 @@ Route::name('practice.')->group(function () {
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'create'])->name('login');
     Route::post('login', [LoginController::class, 'store'])->name('login.store');
+
+    // Language is selectable before authentication, when there is no account
+    // row to save it to. The choice is kept in the session and copied to the
+    // user's profile after a successful sign-in.
+    Route::post('locale', [LoginLocaleController::class, 'update'])->name('locale.update');
 });
 
 Route::post('logout', [LogoutController::class, 'destroy'])->name('logout')->middleware('auth');

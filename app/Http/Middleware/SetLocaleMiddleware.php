@@ -24,6 +24,15 @@ class SetLocaleMiddleware
      */
     public const SUPPORTED = ['en', 'id'];
 
+    /**
+     * Session key for a language explicitly chosen on the guest sign-in screen.
+     *
+     * This is separate from "locale" because the ordinary session key always
+     * contains the resolved locale, including the default. Only an intentional
+     * guest choice should be copied to the account after authentication.
+     */
+    public const GUEST_LOCALE_KEY = 'guest_locale';
+
     public function handle(Request $request, Closure $next): Response
     {
         $locale = $request->user()?->locale

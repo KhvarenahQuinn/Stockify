@@ -8,6 +8,30 @@
         </div>
 
         <div class="w-full rounded-lg border border-gray-200 bg-white p-6 shadow sm:p-8 dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-5 flex items-center justify-between gap-3 border-b border-gray-200 pb-4 dark:border-gray-700">
+                <span id="login-language-label" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ __('Language') }}
+                </span>
+
+                <form method="POST" action="{{ route('locale.update') }}"
+                      class="inline-flex items-center rounded-lg border border-gray-300 bg-gray-50 p-0.5 dark:border-gray-600 dark:bg-gray-700"
+                      aria-labelledby="login-language-label">
+                    @csrf
+                    @foreach (['en' => 'EN', 'id' => 'ID'] as $locale => $label)
+                        <button type="submit" name="locale" value="{{ $locale }}"
+                                aria-label="{{ $locale === 'en' ? 'English' : 'Bahasa Indonesia' }}"
+                                aria-pressed="{{ app()->getLocale() === $locale ? 'true' : 'false' }}"
+                                @class([
+                                    'rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500',
+                                    'bg-primary-600 text-white' => app()->getLocale() === $locale,
+                                    'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-600' => app()->getLocale() !== $locale,
+                                ])>
+                            {{ $label }}
+                        </button>
+                    @endforeach
+                </form>
+            </div>
+
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Sign in to your account') }}</h1>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {{ __('Use the account your administrator set up for you.') }}
