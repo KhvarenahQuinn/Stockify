@@ -2,12 +2,20 @@
 
 namespace App\Policies;
 
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class ProductPolicy
 {
     use HandlesAuthorization;
+
+    /**
+     * Roles that own the catalogue. WORKFLOW.md gives the warehouse manager the
+     * day-to-day product work and the administrator the same rights on top of
+     * governance; staff only ever read it.
+     */
+    private const CATALOGUE_WRITERS = ['warehouse_manager', 'admin'];
 
     /**
      * Determine whether the user can view any models.
@@ -20,7 +28,7 @@ class ProductPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, \App\Models\Product $product): bool
+    public function view(User $user, Product $product): bool
     {
         return true; // all authenticated roles can view individual products
     }
@@ -30,23 +38,22 @@ class ProductPolicy
      */
     public function create(User $user): bool
     {
-        return $user->role?->name === 'warehouse_manager';
+        return in_array($user->role?->name, self::CATALOGUE_WRITERS, true);
     }
 
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, \App\Models\Product $product): bool
+    public function update(User $user, Product $product): bool
     {
-        return $user->role?->name === 'warehouse_manager';
+        return in_array($user->role?->name, self::CATALOGUE_WRITERS, true);
     }
 
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, \App\Models\Product $product): bool
+    public function delete(User $user, Product $product): bool
     {
-        // Based on RBAC matrix: no delete for any role; use status or soft delete if needed
-        return false;
+        return in_array($user->role?->name, self::CATALOGUE_WRITERS, true);
     }
 }

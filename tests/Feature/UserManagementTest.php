@@ -190,9 +190,12 @@ class UserManagementTest extends TestCase
     {
         $staff = $this->makeUser('Siti Rahayu', 'siti@stockify.test', 'warehouse_staff');
 
+        // Staff are redirected to their dashboard with a warning rather than
+        // shown a 403 page, so the assertion follows StaffAuthRedirect.
         $this->actingAs($staff)
             ->get(route('admin.users.index'))
-            ->assertForbidden();
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('warning');
     }
 
     public function test_changing_a_password_rotates_the_remember_token(): void

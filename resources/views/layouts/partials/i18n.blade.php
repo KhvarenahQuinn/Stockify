@@ -18,6 +18,7 @@ $jsStrings = [
     ':count selected',
     'A physical count cannot be negative.',
     'Add',
+    'Added values',
     'Add at least one product before submitting the count.',
     'Confirm count and send to a manager',
     'Count matches the request. This goes to a manager for approval as :requested :unit.',
@@ -43,6 +44,7 @@ $jsStrings = [
     'Preparing...',
     'Record the count',
     'Remove :label',
+    'Removed values',
     'Say what you found before flagging a discrepancy.',
     'short',
     'short of',
@@ -57,6 +59,7 @@ $jsStrings = [
     'This will increase stock on hand.',
     'This will reduce stock on hand.',
     'Warning',
+    'What changed',
     'You counted :counted :unit, :variance :direction the requested :requested. A manager decides what happens next.',
 ];
 ?>

@@ -8,16 +8,21 @@
          * control that needed it rather than throwing a UrlGenerationException.
          */
         $categories = $categories ?? collect();
-        $canManage = auth()->user()?->role?->name === 'admin';
 
         // The controller hands over a paginator, but a half-wired endpoint may
         // pass a plain collection, so totals are read through whichever it is.
         $paginator = $categories instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator ? $categories : null;
         $total = $paginator?->total() ?? $categories->count();
 
-        $canCreate = $canManage && Route::has('categories.store');
-        $canUpdate = $canManage && Route::has('categories.update');
-        $canDelete = $canManage && Route::has('categories.destroy');
+        // Ask the policy per ability instead of testing the role name here: the
+        // policy is the one place that decides who may write master data, and a
+        // duplicated role check silently drifts away from it.
+        $viewer = auth()->user();
+
+        $canCreate = ($viewer?->can('create', \App\Models\Category::class) ?? false) && Route::has('categories.store');
+        $canUpdate = ($viewer?->can('update', new \App\Models\Category) ?? false) && Route::has('categories.update');
+        $canDelete = ($viewer?->can('delete', new \App\Models\Category) ?? false) && Route::has('categories.destroy');
+        $canManage = $canCreate || $canUpdate || $canDelete;
         $showsActions = $canUpdate || $canDelete;
     @endphp
 

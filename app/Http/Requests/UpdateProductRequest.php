@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -9,9 +10,9 @@ class UpdateProductRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // WORKFLOW.md places product management outside the admin remit: the
-        // warehouse manager owns the catalogue, everyone else reads it.
-        return $this->user()?->role?->name === 'warehouse_manager';
+        // WORKFLOW.md gives product management to the manager and the admin;
+        // the policy is the single place that decides it.
+        return $this->user()?->can('update', new Product) ?? false;
     }
 
     /**

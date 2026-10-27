@@ -31,7 +31,7 @@ class AttributePolicy
      */
     public function create(User $user): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 
     /**
@@ -39,7 +39,7 @@ class AttributePolicy
      */
     public function update(User $user, Attribute $attribute): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 
     /**
@@ -47,6 +47,6 @@ class AttributePolicy
      */
     public function delete(User $user, Attribute $attribute): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 }

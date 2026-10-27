@@ -91,7 +91,9 @@ class ProductService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'product.created',
-                "Created product {$product->sku} ({$product->name})"
+                "Created product {$product->sku} ({$product->name})",
+                [],
+                "{$product->sku} ({$product->name})"
             );
 
             return $product->load(['category', 'supplier', 'attributeValues.attribute']);
@@ -134,6 +136,10 @@ class ProductService extends BaseService
                 $attributes['image'] = $this->imageService->replace($product->image, $image);
             }
 
+            // Snapshot before the repository hands back a refreshed model, so
+            // the audit row can show what actually moved.
+            $before = $this->activityLogger->snapshot($product);
+
             /** @var Product $updated */
             $updated = $this->productRepository->update($id, $attributes);
 
@@ -144,7 +150,11 @@ class ProductService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'product.updated',
-                "Updated product {$updated->sku} ({$updated->name})"
+                "Updated product {$updated->sku} ({$updated->name})",
+                // The stored path is an implementation detail, not an edit a
+                // manager needs to audit.
+                $this->activityLogger->diff($before, $updated, ['image']),
+                "{$updated->sku} ({$updated->name})"
             );
 
             return $updated->load(['category', 'supplier', 'attributeValues.attribute']);
@@ -156,6 +166,13 @@ class ProductService extends BaseService
         return DB::transaction(function () use ($id) {
             /** @var Product $product */
             $product = $this->productRepository->findOrFail($id);
+            $product->load(['category', 'supplier']);
+
+            // The deleted row leaves the table, so the snapshot is the only
+            // record left of what it contained.
+            $before = $this->activityLogger->snapshot($product, ['image']);
+            $before['category_id'] = $product->category?->name ?? $before['category_id'] ?? null;
+            $before['supplier_id'] = $product->supplier?->name ?? $before['supplier_id'] ?? null;
 
             $this->imageService->delete($product->image);
 
@@ -166,7 +183,9 @@ class ProductService extends BaseService
                 $this->activityLogger->log(
                     auth()->user(),
                     'product.deleted',
-                    "Deleted product {$product->sku} ({$product->name})"
+                    "Deleted product {$product->sku} ({$product->name})",
+                    ['old' => $before, 'new' => []],
+                    "{$product->sku} ({$product->name})"
                 );
             }
 

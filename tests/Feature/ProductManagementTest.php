@@ -15,10 +15,10 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * Product permissions follow .skills/WORKFLOW.md rather than "admins own
- * everything": the warehouse manager owns the catalogue, staff and admin are
- * read-only. These tests pin that split, because it is the opposite of the
- * master data screens and therefore easy to regress by accident.
+ * Product permissions follow .skills/WORKFLOW.md: the warehouse manager and the
+ * administrator share the catalogue, staff are read-only. These tests pin that
+ * split together with the master data screens, because a regression here means
+ * either a manager or an admin silently loses the catalogue.
  */
 class ProductManagementTest extends TestCase
 {
@@ -101,28 +101,54 @@ class ProductManagementTest extends TestCase
     }
 
     /**
-     * WORKFLOW.md puts product management outside the admin remit, so the admin
-     * sees the catalogue but cannot change it. This is deliberate and the
-     * inverse of the master data screens.
+     * WORKFLOW.md gives the administrator the same product rights as the
+     * manager, so the admin gets the controls and every write endpoint.
      */
-    public function test_admin_can_read_the_catalogue_but_not_change_it(): void
+    public function test_admin_can_manage_the_catalogue(): void
     {
         $this->signInAs('admin');
-        $this->makeProduct();
+        $product = $this->makeProduct();
 
         $this->get(route('products.index'))
             ->assertOk()
-            ->assertSee('Read-only.')
-            ->assertDontSee('Add product')
-            ->assertDontSee('data-modal-toggle="edit-', escape: false);
+            ->assertSee('Add product')
+            ->assertSee('Import')
+            ->assertSee('data-modal-toggle="edit-', escape: false)
+            ->assertSee('data-modal-toggle="delete-', escape: false)
+            ->assertDontSee('Read-only.');
+
+        $this->post(route('products.store'), [
+            'name' => 'Stretch Film Roll',
+            'category_id' => $product->category_id,
+            'supplier_id' => $product->supplier_id,
+            'buy_price' => 45000,
+            'sell_price' => 60000,
+            'min_stock' => 10,
+            'unit' => 'roll',
+        ])->assertRedirect(route('products.index'));
+        $this->assertDatabaseHas('products', ['name' => 'Stretch Film Roll']);
+
+        $this->put(route('products.update', $product), [
+            'name' => 'Corrugated Carton Box (large)',
+            'category_id' => $product->category_id,
+            'supplier_id' => $product->supplier_id,
+            'buy_price' => 3500,
+            'sell_price' => 5000,
+            'min_stock' => 100,
+            'unit' => 'piece',
+        ])->assertRedirect(route('products.index'));
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'name' => 'Corrugated Carton Box (large)']);
+
+        $this->get(route('products.template'))->assertOk();
+
+        $this->delete(route('products.destroy', $product))
+            ->assertRedirect(route('products.index'));
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
     }
 
-    /**
-     * @dataProvider writeRefusedRoles
-     */
-    public function test_write_endpoints_are_refused_outside_the_manager_role(string $roleName): void
+    public function test_staff_are_refused_every_product_write_endpoint(): void
     {
-        $this->signInAs($roleName);
+        $this->signInAs('warehouse_staff');
         $product = $this->makeProduct();
 
         $this->post(route('products.store'), [])->assertForbidden();
@@ -132,17 +158,6 @@ class ProductManagementTest extends TestCase
         $this->get(route('products.template'))->assertForbidden();
 
         $this->assertDatabaseCount('products', 1);
-    }
-
-    /**
-     * @return array<string, array{0: string}>
-     */
-    public static function writeRefusedRoles(): array
-    {
-        return [
-            'staff' => ['warehouse_staff'],
-            'admin' => ['admin'],
-        ];
     }
 
     /**

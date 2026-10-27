@@ -11,6 +11,7 @@ import './opname-ui';
 import './toast';
 import './settings-ui';
 import './report-ui';
+import './activity-log-ui';
 
 // Blade views re-bind data attributes after a validation redirect, since
 // Flowbite only wires them once on window load.

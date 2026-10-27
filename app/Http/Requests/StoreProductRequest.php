@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -9,9 +10,9 @@ class StoreProductRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // WORKFLOW.md places product management outside the admin remit: the
-        // warehouse manager owns the catalogue, everyone else reads it.
-        return $this->user()?->role?->name === 'warehouse_manager';
+        // WORKFLOW.md gives product management to the manager and the admin;
+        // the policy is the single place that decides it.
+        return $this->user()?->can('create', Product::class) ?? false;
     }
 
     /**
@@ -20,7 +21,7 @@ class StoreProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku' => ['sometimes', 'nullable', 'string', 'max:50', Rule::unique('products', 'sku')],
+            'sku' => ['nullable', 'string', 'max:50'],
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],

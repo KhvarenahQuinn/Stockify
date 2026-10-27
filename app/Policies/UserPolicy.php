@@ -14,7 +14,7 @@ class UserPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'superadmin' || $user->role?->name === 'admin';
     }
 
     /**
@@ -22,8 +22,13 @@ class UserPolicy
      */
     public function view(User $user, User $model): bool
     {
-        // Admin can view any user, users can view themselves
-        return $user->role?->name === 'admin' || $user->id === $model->id;
+        // Superadmin can view any user; admin can view any non-superadmin user;
+        // users can view themselves
+        if ($model->role?->name === 'superadmin') {
+            return $user->role?->name === 'superadmin';
+        }
+
+        return $user->role?->name === 'superadmin' || $user->id === $model->id;
     }
 
     /**
@@ -31,7 +36,7 @@ class UserPolicy
      */
     public function create(User $user): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'superadmin' || $user->role?->name === 'admin';
     }
 
     /**
@@ -39,7 +44,13 @@ class UserPolicy
      */
     public function update(User $user, User $model): bool
     {
-        return $user->role?->name === 'admin';
+        // Superadmin can update any user
+        // Admin cannot update superadmin users
+        if ($model->role?->name === 'superadmin') {
+            return $user->role?->name === 'superadmin';
+        }
+
+        return $user->role?->name === 'admin' || $user->id === $model->id;
     }
 
     /**
@@ -47,6 +58,17 @@ class UserPolicy
      */
     public function delete(User $user, User $model): bool
     {
+        // Superadmin can delete any user
+        // Admin cannot delete superadmin users
+        // Admin cannot delete their own account
+        if ($model->role?->name === 'superadmin') {
+            return $user->role?->name === 'superadmin';
+        }
+
+        if ((int) $model->id === (int) auth()->id()) {
+            return false;
+        }
+
         return $user->role?->name === 'admin';
     }
 }

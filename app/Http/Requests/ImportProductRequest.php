@@ -2,15 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ImportProductRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Bulk import matches the product CRUD permission: the warehouse
-        // manager owns the catalogue, staff and admin do not.
-        return $this->user()?->role?->name === 'warehouse_manager';
+        // Bulk import follows the product create permission, so a role that
+        // cannot add one product cannot add fifty through a spreadsheet.
+        return $this->user()?->can('create', Product::class) ?? false;
     }
 
     /**

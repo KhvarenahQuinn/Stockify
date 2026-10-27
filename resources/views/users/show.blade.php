@@ -74,7 +74,8 @@
                 {{ __('Edit user') }}
             </a>
 
-            <form action="{{ route('admin.users.toggle-status', $user) }}" method="POST" class="inline">
+            <form action="{{ route('admin.users.toggle-status', $user) }}" method="POST" class="inline"
+                  id="toggle-user-{{ $user->id }}">
                 @csrf
                 @method('PATCH')
                 <button type="submit"
@@ -83,16 +84,29 @@
                 </button>
             </form>
 
-            <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="inline"
-                  onsubmit="return confirm('{{ __('Delete this user?') }}');">
-                @csrf
-                @method('DELETE')
-                <button type="submit"
-                        class="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:ring-4 focus:ring-red-300 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-800">
-                    {{ __('Delete') }}
-                </button>
-            </form>
+            <button type="button"
+                    data-modal-target="delete-user-{{ $user->id }}"
+                    data-modal-toggle="delete-user-{{ $user->id }}"
+                    class="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:ring-4 focus:ring-red-300 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-800">
+                {{ __('Delete') }}
+            </button>
         </div>
     </div>
+
+    @include('users.partials.delete-user-modal', [
+        'user' => $user,
+        'references' => $deletionBlockers,
+        'toggleFormId' => 'toggle-user-'.$user->id,
+    ])
 </div>
+
+<script>
+    // Flowbite only binds data-modal attributes when asked, and this page has no
+    // other script of its own.
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.initFlowbite === 'function') {
+            window.initFlowbite();
+        }
+    });
+</script>
 @endsection

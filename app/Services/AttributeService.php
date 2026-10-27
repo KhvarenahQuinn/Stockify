@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 class AttributeService extends BaseService
 {
     protected readonly AttributeRepository $attributeRepository;
+
     protected readonly AttributeValueRepository $attributeValueRepository;
 
     public function __construct(
@@ -73,7 +74,9 @@ class AttributeService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'attribute.created',
-            "Created attribute {$attribute->name} with " . count($values) . " value(s)"
+            "Created attribute {$attribute->name} with ".count($values).' value(s)',
+            [],
+            $attribute->name
         );
 
         return $attribute->load('values');
@@ -81,6 +84,9 @@ class AttributeService extends BaseService
 
     public function updateAttribute(int $id, array $attributes, array $values = []): Attribute
     {
+        $before = $this->activityLogger->snapshot($this->findAttribute($id));
+        $valuesBefore = $this->attributeRepository->valuesForAttribute($id)->pluck('value')->all();
+
         // deleteByAttribute() runs before the re-inserts, so without a
         // transaction a failure would leave the attribute with no values at all.
         $attribute = DB::transaction(function () use ($id, $attributes, $values) {
@@ -100,10 +106,20 @@ class AttributeService extends BaseService
             return $attribute;
         });
 
+        $changes = $this->activityLogger->diff($before, $attribute);
+        $valuesAfter = $this->attributeRepository->valuesForAttribute($id)->pluck('value')->all();
+
+        if ($valuesBefore != $valuesAfter) {
+            $changes['old']['values'] = $valuesBefore;
+            $changes['new']['values'] = $valuesAfter;
+        }
+
         $this->activityLogger->log(
             auth()->user(),
             'attribute.updated',
-            "Updated attribute {$attribute->name} with " . count($values) . " value(s)"
+            "Updated attribute {$attribute->name} with ".count($values).' value(s)',
+            $changes,
+            $attribute->name
         );
 
         return $attribute->load('values');
@@ -113,6 +129,8 @@ class AttributeService extends BaseService
     {
         $attribute = $this->findAttribute($id);
         $name = $attribute->name;
+        $before = $this->activityLogger->snapshot($attribute);
+        $before['values'] = $this->attributeRepository->valuesForAttribute($id)->pluck('value')->all();
 
         $result = DB::transaction(function () use ($id) {
             $this->attributeValueRepository->deleteByAttribute($id);
@@ -124,7 +142,9 @@ class AttributeService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'attribute.deleted',
-                "Deleted attribute {$name}"
+                "Deleted attribute {$name}",
+                ['old' => $before, 'new' => []],
+                $name
             );
         }
 
@@ -138,6 +158,8 @@ class AttributeService extends BaseService
 
     public function addAttributeValue(int $attributeId, string $value): AttributeValue
     {
+        $attribute = $this->findAttribute($attributeId);
+
         $attributeValue = $this->attributeValueRepository->create([
             'attribute_id' => $attributeId,
             'value' => $value,
@@ -146,7 +168,9 @@ class AttributeService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'attribute_value.created',
-            "Added value '{$value}' to attribute ID {$attributeId}"
+            "Added value '{$value}' to attribute {$attribute->name}",
+            ['new' => ['value' => $value]],
+            $attribute->name
         );
 
         return $attributeValue;
@@ -154,6 +178,9 @@ class AttributeService extends BaseService
 
     public function updateAttributeValue(int $attributeValueId, string $value): AttributeValue
     {
+        $previous = $this->attributeValueRepository->findOrFail($attributeValueId);
+        $attribute = $this->findAttribute((int) $previous->attribute_id);
+
         $attributeValue = $this->attributeValueRepository->update($attributeValueId, [
             'value' => $value,
         ]);
@@ -161,7 +188,9 @@ class AttributeService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'attribute_value.updated',
-            "Updated attribute value ID {$attributeValueId} to '{$value}'"
+            "Renamed value '{$previous->value}' to '{$value}' on attribute {$attribute->name}",
+            ['old' => ['value' => $previous->value], 'new' => ['value' => $value]],
+            $attribute->name
         );
 
         return $attributeValue;
@@ -170,14 +199,17 @@ class AttributeService extends BaseService
     public function deleteAttributeValue(int $attributeValueId): bool
     {
         $attributeValue = $this->attributeValueRepository->findOrFail($attributeValueId);
+        $attribute = $this->findAttribute((int) $attributeValue->attribute_id);
         $value = $attributeValue->value;
         $result = $this->attributeValueRepository->delete($attributeValueId);
-        
+
         if ($result) {
             $this->activityLogger->log(
                 auth()->user(),
                 'attribute_value.deleted',
-                "Deleted attribute value '{$value}'"
+                "Deleted value '{$value}' from attribute {$attribute->name}",
+                ['old' => ['value' => $value], 'new' => []],
+                $attribute->name
             );
         }
 

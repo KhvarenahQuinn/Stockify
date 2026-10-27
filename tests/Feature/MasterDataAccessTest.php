@@ -12,9 +12,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * The master data screens are readable by warehouse roles but only writable by
- * an administrator. These tests pin both halves of that: the manager sees no
- * way to mutate anything, and the admin sees every control.
+ * The master data screens are readable by warehouse roles and writable by the
+ * manager and the administrator. The policies decide that; these tests pin the
+ * two ends of it: the manager gets every control and every write endpoint, the
+ * staff account gets neither.
  */
 class MasterDataAccessTest extends TestCase
 {
@@ -65,20 +66,18 @@ class MasterDataAccessTest extends TestCase
     /**
      * @dataProvider masterDataPages
      */
-    public function test_manager_gets_a_read_only_view_of_every_master_data_page(string $routeName, string $createLabel): void
+    public function test_manager_gets_the_full_create_edit_delete_controls(string $routeName, string $createLabel): void
     {
         $this->seedMasterData();
         $this->signInAs('warehouse_manager');
 
-        $response = $this->get(route($routeName));
-
-        $response->assertOk()
-            ->assertSee('Read-only.')
-            ->assertDontSee($createLabel)
-            // The edit and delete triggers are the only route into the CUD modals.
-            ->assertDontSee('data-modal-toggle="edit-', escape: false)
-            ->assertDontSee('data-modal-toggle="delete-', escape: false)
-            ->assertDontSee('name="_method" value="DELETE"', escape: false);
+        $this->get(route($routeName))
+            ->assertOk()
+            ->assertSee($createLabel)
+            ->assertSee('data-modal-toggle="edit-', escape: false)
+            ->assertSee('data-modal-toggle="delete-', escape: false)
+            // The read-only note is what the page used to show the manager.
+            ->assertDontSee('Read-only.');
     }
 
     /**
@@ -97,45 +96,101 @@ class MasterDataAccessTest extends TestCase
     }
 
     /**
-     * @dataProvider masterDataPages
+     * Every master data write has to go through: the route guard, the form
+     * request and the service all have to agree with the policy.
      */
-    public function test_manager_is_refused_every_write_endpoint(string $routeName): void
+    public function test_manager_can_write_every_master_data_endpoint(): void
     {
-        $this->seedMasterData();
         $this->signInAs('warehouse_manager');
+        $this->seedMasterData();
 
+        $this->assertEveryMasterDataWriteWorks();
+    }
+
+    public function test_admin_can_write_every_master_data_endpoint(): void
+    {
+        $this->signInAs('admin');
+        $this->seedMasterData();
+
+        $this->assertEveryMasterDataWriteWorks();
+    }
+
+    private function assertEveryMasterDataWriteWorks(): void
+    {
         $category = Category::first();
         $supplier = Supplier::first();
         $attribute = Attribute::first();
         $value = AttributeValue::first();
 
-        $this->post(route('categories.store'), ['name' => 'Injected'])->assertForbidden();
-        $this->put(route('categories.update', $category), ['name' => 'Injected'])->assertForbidden();
-        $this->delete(route('categories.destroy', $category))->assertForbidden();
+        $this->post(route('categories.store'), ['name' => 'Cold Chain'])
+            ->assertRedirect(route('categories.index'));
+        $this->assertDatabaseHas('categories', ['name' => 'Cold Chain', 'slug' => 'cold-chain']);
 
-        $this->post(route('suppliers.store'), ['name' => 'Injected'])->assertForbidden();
-        $this->put(route('suppliers.update', $supplier), ['name' => 'Injected'])->assertForbidden();
-        $this->delete(route('suppliers.destroy', $supplier))->assertForbidden();
+        $this->put(route('categories.update', $category), ['name' => 'Packaging and labels'])
+            ->assertRedirect(route('categories.index'));
+        $this->assertDatabaseHas('categories', ['id' => $category->id, 'name' => 'Packaging and labels']);
 
-        $this->post(route('attributes.store'), ['name' => 'Injected'])->assertForbidden();
-        $this->put(route('attributes.update', $attribute), ['name' => 'Injected'])->assertForbidden();
-        $this->delete(route('attributes.destroy', $attribute))->assertForbidden();
-        $this->post(route('attributes.values.store', $attribute), ['value' => 'Injected'])->assertForbidden();
-        $this->delete(route('attributes.values.destroy', $value))->assertForbidden();
+        $created = Category::where('name', 'Cold Chain')->firstOrFail();
+        $this->delete(route('categories.destroy', $created))
+            ->assertRedirect(route('categories.index'));
+        $this->assertDatabaseMissing('categories', ['id' => $created->id]);
 
-        $this->assertDatabaseCount('categories', 1);
-        $this->assertDatabaseCount('suppliers', 1);
-        $this->assertDatabaseCount('attributes', 1);
-        $this->assertDatabaseCount('attribute_values', 1);
+        $this->post(route('suppliers.store'), [
+            'name' => 'Nusantara Plastik',
+            'email' => 'sales@nusantara.test',
+            'phone' => '+62 21 555 0199',
+            'address' => 'Jl. Raya Bekasi No. 12',
+        ])->assertRedirect(route('suppliers.index'));
+        $this->assertDatabaseHas('suppliers', ['name' => 'Nusantara Plastik', 'code' => 'SUP-0002']);
+
+        $this->put(route('suppliers.update', $supplier), [
+            'name' => 'Sinar Kemasan Jaya',
+            'email' => 'orders@sinar.test',
+            'phone' => '+62 21 555 0134',
+            'address' => 'Jl. Industri No. 4, Jakarta',
+        ])->assertRedirect(route('suppliers.index'));
+        $this->assertDatabaseHas('suppliers', ['id' => $supplier->id, 'name' => 'Sinar Kemasan Jaya']);
+
+        $newSupplier = Supplier::where('name', 'Nusantara Plastik')->firstOrFail();
+        $this->delete(route('suppliers.destroy', $newSupplier))
+            ->assertRedirect(route('suppliers.index'));
+        $this->assertDatabaseMissing('suppliers', ['id' => $newSupplier->id]);
+
+        $this->post(route('attributes.store'), ['name' => 'Material'])
+            ->assertRedirect();
+        $this->assertDatabaseHas('attributes', ['name' => 'Material']);
+
+        $this->put(route('attributes.update', $attribute), ['name' => 'Garment size'])
+            ->assertRedirect(route('attributes.index', ['attribute' => $attribute->id]));
+        $this->assertDatabaseHas('attributes', ['id' => $attribute->id, 'name' => 'Garment size']);
+
+        $this->post(route('attributes.values.store', $attribute), ['value' => 'XL'])
+            ->assertRedirect(route('attributes.index', ['attribute' => $attribute->id]));
+        $this->assertDatabaseHas('attribute_values', ['attribute_id' => $attribute->id, 'value' => 'XL']);
+
+        $this->delete(route('attributes.values.destroy', $value))
+            ->assertRedirect(route('attributes.index', ['attribute' => $attribute->id]));
+        $this->assertDatabaseMissing('attribute_values', ['id' => $value->id]);
+
+        $material = Attribute::where('name', 'Material')->firstOrFail();
+        $this->delete(route('attributes.destroy', $material))
+            ->assertRedirect(route('attributes.index'));
+        $this->assertDatabaseMissing('attributes', ['id' => $material->id]);
     }
 
     public function test_staff_cannot_reach_master_data_at_all(): void
     {
         $this->signInAs('warehouse_staff');
 
-        $this->get(route('categories.index'))->assertForbidden();
-        $this->get(route('suppliers.index'))->assertForbidden();
-        $this->get(route('attributes.index'))->assertForbidden();
+        // Staff are bounced to their dashboard with a warning (StaffAuthRedirect)
+        // rather than shown a 403 page, so the expectation is the redirect.
+        $this->get(route('categories.index'))->assertRedirect(route('dashboard'));
+        $this->get(route('suppliers.index'))->assertRedirect(route('dashboard'));
+        $this->get(route('attributes.index'))->assertRedirect(route('dashboard'));
+
+        $this->post(route('categories.store'), ['name' => 'Injected'])
+            ->assertRedirect(route('dashboard'));
+        $this->assertDatabaseMissing('categories', ['name' => 'Injected']);
     }
 
     public function test_manager_search_filters_the_list_without_leaking_write_controls(): void

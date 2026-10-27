@@ -2,13 +2,18 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Attribute;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreAttributeValueRequest extends FormRequest
 {
+    /**
+     * A value is part of its attribute, so editing values follows the same
+     * ability as editing the attribute itself.
+     */
     public function authorize(): bool
     {
-        return $this->user()?->role?->name === 'admin';
+        return $this->user()?->can('update', new Attribute) ?? false;
     }
 
     /**

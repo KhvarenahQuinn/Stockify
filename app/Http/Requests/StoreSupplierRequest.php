@@ -2,14 +2,20 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Supplier;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreSupplierRequest extends FormRequest
 {
+    /**
+     * The policy decides who may write master data. Repeating the role name
+     * here is what kept managers read-only after the route guard had already
+     * been opened to them.
+     */
     public function authorize(): bool
     {
-        return $this->user()?->role?->name === 'admin';
+        return $this->user()?->can('create', Supplier::class) ?? false;
     }
 
     /**

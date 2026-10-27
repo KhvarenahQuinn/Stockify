@@ -125,9 +125,8 @@ Route::middleware(['auth', 'role:admin'])
         Route::put('/', [SettingController::class, 'update'])->name('update');
     });
 
-// Products: the catalogue is readable by every warehouse role, but per
-// WORKFLOW.md only the manager owns it — admin is deliberately not granted
-// product write access, and staff are read-only.
+// Products: the catalogue is readable by every warehouse role. WORKFLOW.md
+// lets the manager and the administrator change it; staff are read-only.
 Route::middleware(['auth', 'role:warehouse_staff,warehouse_manager,admin'])
     ->prefix('products')
     ->name('products.')
@@ -135,7 +134,7 @@ Route::middleware(['auth', 'role:warehouse_staff,warehouse_manager,admin'])
         Route::get('/', [ProductController::class, 'index'])->name('index');
     });
 
-Route::middleware(['auth', 'role:warehouse_manager'])
+Route::middleware(['auth', 'role:warehouse_manager,admin'])
     ->prefix('products')
     ->name('products.')
     ->group(function () {
@@ -146,9 +145,11 @@ Route::middleware(['auth', 'role:warehouse_manager'])
         Route::get('import-template', [ProductController::class, 'template'])->name('template');
     });
 
-// Master data is readable by warehouse roles so managers can pick categories,
-// attributes and suppliers while registering products. Only administrators may
-// change the records themselves; the views hide the controls to match.
+// Master data is readable and writable by the warehouse manager, and readable
+// by staff so they can pick categories, attributes and suppliers while
+// submitting movements. The admin keeps full access too. The policies
+// (CategoryPolicy, AttributePolicy, SupplierPolicy) are the source of truth;
+// these guards and the views both defer to them.
 Route::middleware(['auth', 'role:warehouse_manager,admin'])
     ->prefix('categories')
     ->name('categories.')
@@ -156,10 +157,12 @@ Route::middleware(['auth', 'role:warehouse_manager,admin'])
         Route::get('/', [CategoryController::class, 'index'])->name('index');
     });
 
-Route::middleware(['auth', 'role:admin'])
+Route::middleware(['auth', 'staff.redirect', 'role:warehouse_manager,admin'])
     ->prefix('categories')
     ->name('categories.')
     ->group(function () {
+        Route::get('/', [CategoryController::class, 'index'])->name('index');
+
         Route::post('/', [CategoryController::class, 'store'])->name('store');
         Route::put('{category}', [CategoryController::class, 'update'])->name('update');
         Route::delete('{category}', [CategoryController::class, 'destroy'])->name('destroy');
@@ -172,10 +175,12 @@ Route::middleware(['auth', 'role:warehouse_manager,admin'])
         Route::get('/', [SupplierController::class, 'index'])->name('index');
     });
 
-Route::middleware(['auth', 'role:admin'])
+Route::middleware(['auth', 'staff.redirect', 'role:warehouse_manager,admin'])
     ->prefix('suppliers')
     ->name('suppliers.')
     ->group(function () {
+        Route::get('/', [SupplierController::class, 'index'])->name('index');
+
         Route::post('/', [SupplierController::class, 'store'])->name('store');
         Route::put('{supplier}', [SupplierController::class, 'update'])->name('update');
         Route::delete('{supplier}', [SupplierController::class, 'destroy'])->name('destroy');
@@ -188,10 +193,12 @@ Route::middleware(['auth', 'role:warehouse_manager,admin'])
         Route::get('/', [AttributeController::class, 'index'])->name('index');
     });
 
-Route::middleware(['auth', 'role:admin'])
+Route::middleware(['auth', 'staff.redirect', 'role:warehouse_manager,admin'])
     ->prefix('attributes')
     ->name('attributes.')
     ->group(function () {
+        Route::get('/', [AttributeController::class, 'index'])->name('index');
+
         Route::post('/', [AttributeController::class, 'store'])->name('store');
         Route::put('{attribute}', [AttributeController::class, 'update'])->name('update');
         Route::delete('{attribute}', [AttributeController::class, 'destroy'])->name('destroy');
@@ -203,7 +210,7 @@ Route::middleware(['auth', 'role:admin'])
     });
 
 // Protected routes
-Route::middleware(['auth', 'role:admin'])->name('admin.')->prefix('admin')->group(function () {
+Route::middleware(['auth', 'staff.redirect', 'role:superadmin,admin'])->name('admin.')->prefix('admin')->group(function () {
     Route::resource('users', UserController::class)->except(['show']);
     Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
     Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');

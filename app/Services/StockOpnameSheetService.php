@@ -165,7 +165,9 @@ class StockOpnameSheetService extends BaseService
                     abs($deficit),
                     $surplus,
                     $user?->name ?? 'system'
-                )
+                ),
+                [],
+                $sheet->reference
             );
 
             return $sheet;
@@ -252,7 +254,9 @@ class StockOpnameSheetService extends BaseService
                     $sheet->items->count(),
                     $adjusted,
                     $verifier?->name ?? 'system'
-                )
+                ),
+                [],
+                $sheet->reference
             );
 
             return $sheet;

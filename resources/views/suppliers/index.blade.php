@@ -3,16 +3,21 @@
 @section('content')
     @php
         $suppliers = $suppliers ?? collect();
-        $canManage = auth()->user()?->role?->name === 'admin';
 
         // The controller hands over a paginator, but a half-wired endpoint may
         // pass a plain collection, so totals are read through whichever it is.
         $paginator = $suppliers instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator ? $suppliers : null;
         $total = $paginator?->total() ?? $suppliers->count();
 
-        $canCreate = $canManage && Route::has('suppliers.store');
-        $canUpdate = $canManage && Route::has('suppliers.update');
-        $canDelete = $canManage && Route::has('suppliers.destroy');
+        // Ask the policy per ability instead of testing the role name here: the
+        // policy is the one place that decides who may write master data, and a
+        // duplicated role check silently drifts away from it.
+        $viewer = auth()->user();
+
+        $canCreate = ($viewer?->can('create', \App\Models\Supplier::class) ?? false) && Route::has('suppliers.store');
+        $canUpdate = ($viewer?->can('update', new \App\Models\Supplier) ?? false) && Route::has('suppliers.update');
+        $canDelete = ($viewer?->can('delete', new \App\Models\Supplier) ?? false) && Route::has('suppliers.destroy');
+        $canManage = $canCreate || $canUpdate || $canDelete;
         $showsActions = $canUpdate || $canDelete;
     @endphp
 

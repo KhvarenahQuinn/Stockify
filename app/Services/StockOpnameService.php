@@ -84,7 +84,9 @@ class StockOpnameService extends BaseService
                 auth()->user(),
                 'stock_opname.created',
                 "Counted {$product->name}: system {$systemStock}, physical {$physicalStock}, "
-                ."difference {$opname->difference} ({$opname->opname_number})"
+                ."difference {$opname->difference} ({$opname->opname_number})",
+                [],
+                $opname->opname_number
             );
 
             return $opname;
@@ -140,7 +142,12 @@ class StockOpnameService extends BaseService
                 auth()->user(),
                 'stock_opname.adjusted',
                 "Adjusted {$product->name} to {$physicalStock} "
-                ."(counted at {$opname->physical_stock}, system was {$systemAtPosting})"
+                ."(counted at {$opname->physical_stock}, system was {$systemAtPosting})",
+                [
+                    'old' => ['current_stock' => $systemAtPosting],
+                    'new' => ['current_stock' => $physicalStock],
+                ],
+                $opname->opname_number
             );
 
             return $opname;

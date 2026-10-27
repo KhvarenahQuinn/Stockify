@@ -5,29 +5,28 @@
         use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
         /**
-         * Product governance follows WORKFLOW.md rather than a role table that
-         * would let a manager read the catalogue but not change it: managers
-         * own the catalogue, staff only reference it. Every route reference is
-         * probed so a half-registered backend hides a control instead of
-         * throwing.
+         * Product governance follows WORKFLOW.md: the manager and the
+         * administrator share the catalogue, staff only reference it. Every
+         * route reference is probed so a half-registered backend hides a
+         * control instead of throwing.
          */
         $products = $products ?? collect();
         $categories = $categories ?? collect();
 
-        // WORKFLOW.md: the warehouse manager owns the catalogue. Staff and
-        // admin are both read-only here — deliberately the inverse of the
-        // master data screens, where admin is the writer.
-        $canManage = auth()->user()?->role?->name === 'warehouse_manager';
+        // Ask the policy per ability rather than matching the role name here,
+        // so a change to ProductPolicy reaches the screen automatically.
+        $viewer = auth()->user();
 
         // The controller hands over a paginator, but a half-wired endpoint may
         // pass a plain collection, so totals are read through whichever it is.
         $paginator = $products instanceof LengthAwarePaginator ? $products : null;
         $total = $paginator?->total() ?? $products->count();
 
-        $canCreate = $canManage && Route::has('products.store');
-        $canUpdate = $canManage && Route::has('products.update');
-        $canDelete = $canManage && Route::has('products.destroy');
-        $canImport = $canManage && Route::has('products.import');
+        $canCreate = ($viewer?->can('create', \App\Models\Product::class) ?? false) && Route::has('products.store');
+        $canUpdate = ($viewer?->can('update', new \App\Models\Product) ?? false) && Route::has('products.update');
+        $canDelete = ($viewer?->can('delete', new \App\Models\Product) ?? false) && Route::has('products.destroy');
+        $canImport = ($viewer?->can('create', \App\Models\Product::class) ?? false) && Route::has('products.import');
+        $canManage = $canCreate || $canUpdate || $canDelete;
         $showsActions = $canUpdate || $canDelete;
     @endphp
 

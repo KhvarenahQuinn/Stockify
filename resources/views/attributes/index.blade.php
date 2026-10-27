@@ -11,18 +11,23 @@
          * component attribute bags, and shadowing it breaks the <x-form.*> fields.
          */
         $specs = $specs ?? collect();
-        $canManage = auth()->user()?->role?->name === 'admin';
 
         // The controller hands over a paginator, but a half-wired endpoint may
         // pass a plain collection, so totals are read through whichever it is.
         $paginator = $specs instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator ? $specs : null;
         $total = $paginator?->total() ?? $specs->count();
 
-        $canCreate = $canManage && Route::has('attributes.store');
-        $canUpdate = $canManage && Route::has('attributes.update');
-        $canDelete = $canManage && Route::has('attributes.destroy');
-        $canAddValue = $canManage && Route::has('attributes.values.store');
-        $canDeleteValue = $canManage && Route::has('attributes.values.destroy');
+        // Ask the policy per ability instead of testing the role name here: the
+        // policy is the one place that decides who may write master data, and a
+        // duplicated role check silently drifts away from it.
+        $viewer = auth()->user();
+
+        $canCreate = ($viewer?->can('create', \App\Models\Attribute::class) ?? false) && Route::has('attributes.store');
+        $canUpdate = ($viewer?->can('update', new \App\Models\Attribute) ?? false) && Route::has('attributes.update');
+        $canDelete = ($viewer?->can('delete', new \App\Models\Attribute) ?? false) && Route::has('attributes.destroy');
+        $canAddValue = ($viewer?->can('update', new \App\Models\Attribute) ?? false) && Route::has('attributes.values.store');
+        $canDeleteValue = ($viewer?->can('update', new \App\Models\Attribute) ?? false) && Route::has('attributes.values.destroy');
+        $canManage = $canCreate || $canUpdate || $canDelete;
 
         $indexUrl = Route::has('attributes.index') ? route('attributes.index') : url()->current();
 
@@ -221,19 +226,15 @@
                                             <span>{{ $attributeValue->value }}</span>
 
                                             @if ($canDeleteValue)
-                                                <form method="POST"
-                                                      action="{{ Route::has('attributes.values.destroy') ? route('attributes.values.destroy', $attributeValue) : '#' }}"
-                                                      onsubmit="return confirm('{{ __('Remove the value :value from :attribute?', ['value' => $attributeValue->value, 'attribute' => $selected->name]) }}');">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit"
-                                                            class="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:text-gray-500 dark:hover:bg-gray-600 dark:hover:text-red-400"
-                                                            aria-label="{{ __('Remove :value from :name', ['value' => $attributeValue->value, 'name' => $selected->name]) }}">
-                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                                                        </svg>
-                                                    </button>
-                                                </form>
+                                                <button type="button"
+                                                        data-modal-target="delete-value-{{ $attributeValue->id }}"
+                                                        data-modal-toggle="delete-value-{{ $attributeValue->id }}"
+                                                        class="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:text-gray-500 dark:hover:bg-gray-600 dark:hover:text-red-400"
+                                                        aria-label="{{ __('Remove :value from :name', ['value' => $attributeValue->value, 'name' => $selected->name]) }}">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                </button>
                                             @endif
                                         </li>
                                     @endforeach
@@ -269,6 +270,17 @@
 
     @if ($selected && $canDelete)
         @include('attributes.partials.delete-modal', ['attribute' => $selected])
+    @endif
+
+    {{-- One small dialog per value: the chips are too small to carry a native
+         confirm, and a refused delete needs room to explain itself. --}}
+    @if ($selected && $canDeleteValue)
+        @foreach ($selectedValues as $attributeValue)
+            @include('attributes.partials.delete-value-modal', [
+                'attributeValue' => $attributeValue,
+                'attribute' => $selected,
+            ])
+        @endforeach
     @endif
 
     <script>

@@ -45,7 +45,9 @@ class SupplierService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'supplier.created',
-            "Created supplier {$supplier->name} ({$supplier->code})"
+            "Created supplier {$supplier->name} ({$supplier->code})",
+            [],
+            "{$supplier->name} ({$supplier->code})"
         );
 
         return $supplier->loadCount('products');
@@ -53,12 +55,16 @@ class SupplierService extends BaseService
 
     public function updateSupplier(int $id, array $attributes): Supplier
     {
+        $before = $this->activityLogger->snapshot($this->findSupplier($id));
+
         $supplier = $this->repository->update($id, $attributes);
 
         $this->activityLogger->log(
             auth()->user(),
             'supplier.updated',
-            "Updated supplier {$supplier->name} ({$supplier->code})"
+            "Updated supplier {$supplier->name} ({$supplier->code})",
+            $this->activityLogger->diff($before, $supplier),
+            "{$supplier->name} ({$supplier->code})"
         );
 
         return $supplier->loadCount('products');
@@ -69,14 +75,17 @@ class SupplierService extends BaseService
         $supplier = $this->findSupplier($id);
         $name = $supplier->name;
         $code = $supplier->code;
-        
+        $before = $this->activityLogger->snapshot($supplier);
+
         $result = $this->repository->delete($id);
-        
+
         if ($result) {
             $this->activityLogger->log(
                 auth()->user(),
                 'supplier.deleted',
-                "Deleted supplier {$name} ({$code})"
+                "Deleted supplier {$name} ({$code})",
+                ['old' => $before, 'new' => []],
+                "{$name} ({$code})"
             );
         }
 
@@ -92,13 +101,13 @@ class SupplierService extends BaseService
     {
         $prefix = 'SUP-';
         $lastCode = $this->supplierRepository->latestCode();
-        
+
         if ($lastCode === null) {
-            return $prefix . '0001';
+            return $prefix.'0001';
         }
 
         $number = (int) substr($lastCode, strlen($prefix)) + 1;
-        
-        return $prefix . str_pad($number, 4, '0', STR_PAD_LEFT);
+
+        return $prefix.str_pad($number, 4, '0', STR_PAD_LEFT);
     }
 }

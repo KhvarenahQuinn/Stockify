@@ -31,7 +31,7 @@ class CategoryPolicy
      */
     public function create(User $user): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 
     /**
@@ -39,7 +39,7 @@ class CategoryPolicy
      */
     public function update(User $user, Category $category): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 
     /**
@@ -47,6 +47,6 @@ class CategoryPolicy
      */
     public function delete(User $user, Category $category): bool
     {
-        return $user->role?->name === 'admin';
+        return $user->role?->name === 'warehouse_manager' || $user->role?->name === 'admin';
     }
 }

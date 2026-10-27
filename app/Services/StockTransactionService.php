@@ -175,7 +175,9 @@ class StockTransactionService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'stock_transaction.created',
-            "Submitted {$transaction->reference_number} for {$transaction->quantity} unit(s)"
+            "Submitted {$transaction->reference_number} for {$transaction->quantity} unit(s)",
+            [],
+            $transaction->reference_number
         );
 
         return $transaction->load(['product', 'user', 'supplier']);
@@ -332,7 +334,12 @@ class StockTransactionService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'stock_adjustment.recorded',
-            "Adjusted {$product->sku} from {$stockBefore} to {$newStock}: {$reason}"
+            "Adjusted {$product->sku} from {$stockBefore} to {$newStock}: {$reason}",
+            [
+                'old' => ['current_stock' => $stockBefore],
+                'new' => ['current_stock' => $newStock],
+            ],
+            "{$product->sku} ({$product->name})"
         );
 
         return $transaction;
@@ -358,6 +365,8 @@ class StockTransactionService extends BaseService
             $this->assertStatus($transaction, self::STATUS_PENDING);
 
             $inspectedQuantity = (int) $attributes['inspected_quantity'];
+            $previousCount = $transaction->inspected_quantity;
+            $previousNote = $transaction->inspection_note;
 
             $transaction->update([
                 'inspected_by' => auth()->id(),
@@ -373,7 +382,18 @@ class StockTransactionService extends BaseService
                 $variance === 0 ? 'stock_transaction.inspected' : 'stock_transaction.discrepancy',
                 $variance === 0
                     ? "Inspected {$transaction->reference_number}: {$inspectedQuantity} unit(s) matched the request"
-                    : "Inspected {$transaction->reference_number}: counted {$inspectedQuantity}, requested {$transaction->quantity}"
+                    : "Inspected {$transaction->reference_number}: counted {$inspectedQuantity}, requested {$transaction->quantity}",
+                [
+                    'old' => [
+                        'inspected_quantity' => $previousCount,
+                        'inspection_note' => $previousNote,
+                    ],
+                    'new' => [
+                        'inspected_quantity' => $inspectedQuantity,
+                        'inspection_note' => $attributes['inspection_note'] ?? null,
+                    ],
+                ],
+                $transaction->reference_number
             );
 
             return $transaction;
@@ -463,7 +483,12 @@ class StockTransactionService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'stock_transaction.approved',
-                "Approved {$transaction->reference_number}: stock {$stockBefore} -> {$stockAfter}"
+                "Approved {$transaction->reference_number}: stock {$stockBefore} -> {$stockAfter}",
+                [
+                    'old' => ['status' => self::STATUS_PENDING, 'current_stock' => $stockBefore],
+                    'new' => ['status' => self::STATUS_APPROVED, 'current_stock' => $stockAfter],
+                ],
+                $transaction->reference_number
             );
 
             return $transaction;
@@ -483,6 +508,8 @@ class StockTransactionService extends BaseService
 
             $this->assertStatus($transaction, self::STATUS_PENDING);
 
+            $previousNotes = $transaction->notes;
+
             $transaction->update([
                 'status' => self::STATUS_REJECTED,
                 'approved_by' => auth()->id(),
@@ -492,7 +519,12 @@ class StockTransactionService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'stock_transaction.rejected',
-                "Rejected {$transaction->reference_number}"
+                "Rejected {$transaction->reference_number}",
+                [
+                    'old' => ['status' => self::STATUS_PENDING, 'notes' => $previousNotes],
+                    'new' => ['status' => self::STATUS_REJECTED, 'notes' => $notes ?? $previousNotes],
+                ],
+                $transaction->reference_number
             );
 
             return $transaction;
@@ -517,7 +549,12 @@ class StockTransactionService extends BaseService
             $this->activityLogger->log(
                 auth()->user(),
                 'stock_transaction.completed',
-                "Completed {$transaction->reference_number}"
+                "Completed {$transaction->reference_number}",
+                [
+                    'old' => ['status' => self::STATUS_APPROVED],
+                    'new' => ['status' => self::STATUS_COMPLETED],
+                ],
+                $transaction->reference_number
             );
 
             return $transaction;

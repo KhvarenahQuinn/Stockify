@@ -46,7 +46,9 @@ class CategoryService extends BaseService
         $this->activityLogger->log(
             auth()->user(),
             'category.created',
-            "Created category {$category->name}"
+            "Created category {$category->name}",
+            [],
+            $category->name
         );
 
         return $category->loadCount('products');
@@ -58,12 +60,16 @@ class CategoryService extends BaseService
             $attributes['slug'] = $this->generateSlug($attributes['name'], $id);
         }
 
+        $before = $this->activityLogger->snapshot($this->findCategory($id));
+
         $category = $this->repository->update($id, $attributes);
 
         $this->activityLogger->log(
             auth()->user(),
             'category.updated',
-            "Updated category {$category->name}"
+            "Updated category {$category->name}",
+            $this->activityLogger->diff($before, $category),
+            $category->name
         );
 
         return $category->loadCount('products');
@@ -73,14 +79,17 @@ class CategoryService extends BaseService
     {
         $category = $this->findCategory($id);
         $name = $category->name;
-        
+        $before = $this->activityLogger->snapshot($category);
+
         $result = $this->repository->delete($id);
-        
+
         if ($result) {
             $this->activityLogger->log(
                 auth()->user(),
                 'category.deleted',
-                "Deleted category {$name}"
+                "Deleted category {$name}",
+                ['old' => $before, 'new' => []],
+                $name
             );
         }
 
@@ -99,7 +108,7 @@ class CategoryService extends BaseService
         $count = 1;
 
         while ($this->categoryRepository->slugExists($slug, $ignoreId)) {
-            $slug = $original . '-' . $count++;
+            $slug = $original.'-'.$count++;
         }
 
         return $slug;

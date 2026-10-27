@@ -143,7 +143,8 @@
                                                 </li>
                                             @endif
                                             <li>
-                                                <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}">
+                                                <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}"
+                                                      id="toggle-user-{{ $user->id }}">
                                                     @csrf @method('PATCH')
                                                     <button type="submit"
                                                             class="block w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600">
@@ -152,14 +153,12 @@
                                                 </form>
                                             </li>
                                             <li>
-                                                <form method="POST" action="{{ route('admin.users.destroy', $user) }}"
-                                                      onsubmit="return confirm('{{ __('Delete :name? This cannot be undone.', ['name' => $user->name]) }}');">
-                                                    @csrf @method('DELETE')
-                                                    <button type="submit"
-                                                            class="block w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-gray-600">
-                                                        {{ __('Delete') }}
-                                                    </button>
-                                                </form>
+                                                <button type="button"
+                                                        data-modal-target="delete-user-{{ $user->id }}"
+                                                        data-modal-toggle="delete-user-{{ $user->id }}"
+                                                        class="block w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-gray-600">
+                                                    {{ __('Delete') }}
+                                                </button>
                                             </li>
                                         </ul>
                                     </div>
@@ -191,6 +190,16 @@
         @if ($canResetPassword)
             @include('users.partials.reset-password-modal', ['user' => $user])
         @endif
+        @include('users.partials.delete-user-modal', [
+            'user' => $user,
+            'references' => [
+                'transactions' => $user->stock_transactions_count ?? 0,
+                'approvals' => $user->approved_transactions_count ?? 0,
+                'opnames' => $user->stock_opnames_count ?? 0,
+                'sheets' => $user->audited_sheets_count ?? 0,
+            ],
+            'toggleFormId' => 'toggle-user-'.$user->id,
+        ])
     @endforeach
 
     <script>

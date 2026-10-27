@@ -35,6 +35,10 @@ class AttributeController extends Controller
 
         // Deliberately not named `attributes`: Blade reserves that variable for
         // component attribute bags, and shadowing it breaks <x-form.*> fields.
+        // The remove-value dialog warns when products still use a value, so the
+        // count travels with the relation instead of being queried per chip.
+        $selected?->load(['values' => fn ($query) => $query->withCount('products')]);
+
         return view('attributes.index', [
             'specs' => $specs,
             'selectedAttribute' => $selected,
